@@ -6,3 +6,4 @@ numpy
 fbprophet
 plotly
 requests
+pystan==2.19.1.1

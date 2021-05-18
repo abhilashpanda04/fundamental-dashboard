@@ -4,3 +4,5 @@ pandas
 yfinance
 numpy
 fbprophet
+plotly
+requests

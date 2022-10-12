@@ -15,15 +15,16 @@ from plotly import graph_objs as go
 
 
 
-st.title("Fundamental Dashboard")
-symbol=st.sidebar.text_input("symbol")
-
 def main():
 
-    if symbol==None:
-        st.write("input a ticker")
+    st.title("Fundamental Dashboard")
+    symbol=st.sidebar.text_input("TICKER")
+    if symbol=="":
+        st.write(symbol)
+        st.info("You have not selected any ticker please input a ticker")
         st.stop()
-    screen=st.sidebar.selectbox("views",["Forecasting","intraday-price","overview","fundamental","News","Ownership","Technicals","Balance sheet","Income statement"])
+
+    screen=st.sidebar.selectbox("MENU",["Forecasting","intraday-price","overview","News",])#Ownership","Technicals","Balance sheet","Income statement","fundamental",
     st.title(screen)
 
     stock=stocks(config.key,symbol)
@@ -34,7 +35,9 @@ def main():
     if screen=="intraday-price":
         
         data=stock1.get_intraday()
+        # st.write(pd.DataFrame(data['Time Series (5min)']).T.columns)
         st.table(pd.DataFrame(data['Time Series (5min)']).T)
+        st.line_chart(pd.DataFrame(data['Time Series (5min)']).T.iloc[ : ,3])
 
     if screen=="Income statement":
         data=stock1.get_income_statement()
@@ -69,6 +72,7 @@ def main():
         plot_data()
         #forecasting
         df_train=data[['Date','Close']]
+        df_train.Date=df_train.Date.dt.strftime('%m/%d/%Y')
         df_train=df_train.rename(columns={'Date':'ds','Close':'y'})
         m=Prophet()
         m.fit(df_train)
@@ -96,7 +100,7 @@ def main():
         # response=r.json()
         # st.write()
 
-        col1,col2=st.beta_columns([1,3])
+        col1,col2=st.columns([1,3])
         with col1:
             st.image(logo["url"])
         
@@ -139,11 +143,11 @@ def main():
 
     elif screen=="fundamental":
 
-        stats1=stock.get_stats()
-        stats=json.loads(stats1)
+        get_stats=stock.get_stats()
+        stats=json.loads(get_stats)
         st.header('Ratios')
 
-        col1, col2 = st.beta_columns(2)
+        col1, col2 = st.columns(2)
         with col1:
             st.subheader('P/E')
             st.write(stats['peRatio'])
@@ -157,11 +161,11 @@ def main():
             st.write(stats['priceToBook'])
         with col2:
             st.subheader('Revenue')
-            st.write(format_number(stats['revenue']))
+            st.write(stats['revenue'])
             st.subheader('Cash')
-            st.write(format_number(stats['totalCash']))
+            st.write(stats['totalCash'])
             st.subheader('Debt')
-            st.write(format_number(stats['currentDebt']))
+            st.write(stats['currentDebt'])
             st.subheader('200 Day Moving Average')
             st.write(stats['day200MovingAvg'])
             st.subheader('50 Day Moving Average')
@@ -180,7 +184,7 @@ def main():
             st.image(article['image'])
 
     elif screen=="Balance sheet":
-        data=stock1.get_balance_sheet()
+        data=stock.get_balance_sheet()
         data1=pd.DataFrame(data['annualReports'])
         st.table(data1.T)
 

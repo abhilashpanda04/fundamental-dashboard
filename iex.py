@@ -5,6 +5,7 @@ class stocks:
     def __init__(self,token,symbol):
         self.base_url="https://cloud.iexapis.com/stable/"
         self.base_url2="https://www.alphavantage.co/query"
+        self.base_url3="sam"
         self.symbol=symbol
         self.token=token
     
@@ -26,8 +27,14 @@ class stocks:
         response=r.json()
         return response
 
+    # def get_balance_sheet(self):
+    #     url=f"{self.base_url2}?function=BALANCE_SHEET&symbol={self.symbol}&apikey={self.token}"
+    #     r=requests.get(url)
+    #     response=r.json()
+    #     return response
+    
     def get_balance_sheet(self):
-        url=f"{self.base_url2}?function=BALANCE_SHEET&symbol={self.symbol}&apikey={self.token}"
+        url=f"{self.base_url}stock/{self.symbol}/balance-sheet?token={self.token}"
         r=requests.get(url)
         response=r.json()
         return response
@@ -43,6 +50,7 @@ class stocks:
         r=requests.get(url)
         response=r.json()
         return response
+
     def get_income_statement(self):
         url=f'{self.base_url2}?function=INCOME_STATEMENT&symbol={self.symbol}&apikey={self.token}'
         r=requests.get(url)

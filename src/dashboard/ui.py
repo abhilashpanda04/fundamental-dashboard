@@ -555,13 +555,22 @@ def render_detailed_financials(data: dict, category: str):
             if fy in years:
                 year_map[fy] = entry.get("val")
 
+        # Detect if this is a share count or per-share metric (not USD)
+        is_shares = any(w in concept_name.lower() for w in ["shares", "eps", "dividend per"])
+
         row = [concept_name]
         for year in years:
             val = year_map.get(year)
             if val is None:
                 row.append("[dim]—[/dim]")
             elif isinstance(val, (int, float)):
-                if abs(val) >= 1_000_000_000:
+                if is_shares and abs(val) >= 1_000_000_000:
+                    row.append(f"{val / 1_000_000_000:.2f}B")
+                elif is_shares and abs(val) >= 1_000_000:
+                    row.append(f"{val / 1_000_000:.1f}M")
+                elif is_shares:
+                    row.append(f"{val:,.2f}")
+                elif abs(val) >= 1_000_000_000:
                     row.append(f"${val / 1_000_000_000:.2f}B")
                 elif abs(val) >= 1_000_000:
                     row.append(f"${val / 1_000_000:.1f}M")

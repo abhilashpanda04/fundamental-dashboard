@@ -12,12 +12,16 @@ Data available:
 
 import requests
 import json
+import os
 import logging
 from functools import lru_cache
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "FundamentalDashboard abhilashk.isme1517@gmail.com"
+# SEC requires a User-Agent with contact info per fair access policy.
+# Set SEC_EDGAR_EMAIL env var, or it falls back to a generic identifier.
+USER_EMAIL = os.environ.get("SEC_EDGAR_EMAIL", "fundamental-dashboard-user@example.com")
+USER_AGENT = f"FundamentalDashboard {USER_EMAIL}"
 HEADERS = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip, deflate"}
 
 # ──────────────────────────────────────────────────────────────
@@ -128,48 +132,95 @@ def get_detailed_financials(symbol: str) -> dict:
     if not facts:
         return {}
 
-    # Key financial concepts to extract
+    # Key financial concepts organized into detailed statement categories
     concepts = {
         "Income Statement": [
-            ("Revenues", "Revenues"),
-            ("Revenue (Alt)", "RevenueFromContractWithCustomerExcludingAssessedTax"),
+            ("Revenue", "RevenueFromContractWithCustomerExcludingAssessedTax"),
+            ("Revenue (Alt)", "Revenues"),
             ("Cost of Revenue", "CostOfGoodsAndServicesSold"),
             ("Gross Profit", "GrossProfit"),
+            ("R&D Expense", "ResearchAndDevelopmentExpense"),
+            ("SG&A Expense", "SellingGeneralAndAdministrativeExpense"),
             ("Operating Income", "OperatingIncomeLoss"),
+            ("Interest Income", "InvestmentIncomeInterest"),
+            ("Interest Expense", "InterestExpense"),
+            ("Income Tax Expense", "IncomeTaxExpenseBenefit"),
             ("Net Income", "NetIncomeLoss"),
             ("EPS (Basic)", "EarningsPerShareBasic"),
             ("EPS (Diluted)", "EarningsPerShareDiluted"),
-            ("R&D Expense", "ResearchAndDevelopmentExpense"),
-            ("SG&A Expense", "SellingGeneralAndAdministrativeExpense"),
         ],
-        "Balance Sheet": [
-            ("Total Assets", "Assets"),
-            ("Total Liabilities", "Liabilities"),
-            ("Stockholders Equity", "StockholdersEquity"),
+        "Comprehensive Income": [
+            ("Net Income", "NetIncomeLoss"),
+            ("Other Comprehensive Income (Net)", "OtherComprehensiveIncomeLossNetOfTaxPortionAttributableToParent"),
+            ("OCI - Securities", "OtherComprehensiveIncomeLossAvailableForSaleSecuritiesAdjustmentNetOfTax"),
+            ("OCI - Derivatives/Hedges", "OtherComprehensiveIncomeLossDerivativesQualifyingAsHedgesNetOfTax"),
+            ("OCI - Foreign Currency", "OtherComprehensiveIncomeLossForeignCurrencyTransactionAndTranslationAdjustmentNetOfTax"),
+            ("Comprehensive Income (Total)", "ComprehensiveIncomeNetOfTax"),
+            ("AOCI Balance", "AccumulatedOtherComprehensiveIncomeLossNetOfTax"),
+        ],
+        "Balance Sheet (Assets)": [
             ("Cash & Equivalents", "CashAndCashEquivalentsAtCarryingValue"),
             ("Short-term Investments", "ShortTermInvestments"),
+            ("Marketable Securities (Current)", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"),
             ("Accounts Receivable", "AccountsReceivableNetCurrent"),
             ("Inventory", "InventoryNet"),
+            ("Other Current Assets", "OtherAssetsCurrent"),
             ("Total Current Assets", "AssetsCurrent"),
-            ("Total Current Liabilities", "LiabilitiesCurrent"),
-            ("Long-term Debt", "LongTermDebt"),
+            ("Marketable Securities (Non-current)", "AvailableForSaleSecuritiesDebtSecuritiesNoncurrent"),
+            ("Property, Plant & Equipment (Net)", "PropertyPlantAndEquipmentNet"),
+            ("Goodwill", "Goodwill"),
+            ("Intangible Assets (Net)", "FiniteLivedIntangibleAssetsNet"),
+            ("Other Non-current Assets", "OtherAssetsNoncurrent"),
+            ("Total Assets", "Assets"),
+        ],
+        "Balance Sheet (Liabilities & Equity)": [
             ("Accounts Payable", "AccountsPayableCurrent"),
+            ("Deferred Revenue (Current)", "DeferredRevenueCurrent"),
+            ("Commercial Paper", "CommercialPaper"),
+            ("Current Portion of LT Debt", "LongTermDebtCurrent"),
+            ("Other Current Liabilities", "OtherLiabilitiesCurrent"),
+            ("Total Current Liabilities", "LiabilitiesCurrent"),
+            ("Long-term Debt", "LongTermDebtNoncurrent"),
+            ("Deferred Revenue (Non-current)", "DeferredRevenueNoncurrent"),
+            ("Other Non-current Liabilities", "OtherLiabilitiesNoncurrent"),
+            ("Total Liabilities", "Liabilities"),
+            ("Common Stock", "CommonStocksIncludingAdditionalPaidInCapital"),
+            ("Retained Earnings", "RetainedEarningsAccumulatedDeficit"),
+            ("AOCI", "AccumulatedOtherComprehensiveIncomeLossNetOfTax"),
+            ("Stockholders Equity", "StockholdersEquity"),
+            ("Total Liabilities & Equity", "LiabilitiesAndStockholdersEquity"),
         ],
         "Cash Flow": [
+            ("Net Income", "NetIncomeLoss"),
+            ("Depreciation & Amortization", "DepreciationDepletionAndAmortization"),
+            ("Stock-Based Compensation", "ShareBasedCompensation"),
             ("Operating Cash Flow", "NetCashProvidedByOperatingActivities"),
-            ("Capital Expenditure", "PaymentsToAcquirePropertyPlantAndEquipment"),
-            ("Depreciation", "DepreciationDepletionAndAmortization"),
-            ("Stock Comp", "ShareBasedCompensation"),
+            ("CapEx", "PaymentsToAcquirePropertyPlantAndEquipment"),
+            ("Purchases of Investments", "PaymentsToAcquireAvailableForSaleSecuritiesDebt"),
+            ("Proceeds from Investments", "ProceedsFromSaleOfAvailableForSaleSecuritiesDebt"),
+            ("Investing Cash Flow", "NetCashProvidedByFinancingActivities"),
             ("Dividends Paid", "PaymentsOfDividends"),
             ("Share Repurchases", "PaymentsForRepurchaseOfCommonStock"),
+            ("Debt Issued", "ProceedsFromIssuanceOfLongTermDebt"),
+            ("Debt Repaid", "RepaymentsOfLongTermDebt"),
         ],
-        "Per Share & Other": [
-            ("Shares Outstanding", "CommonStockSharesOutstanding"),
-            ("Shares Outstanding (Wtd)", "WeightedAverageNumberOfShareOutstandingBasicAndDiluted"),
+        "Per Share & Shares": [
+            ("EPS (Basic)", "EarningsPerShareBasic"),
+            ("EPS (Diluted)", "EarningsPerShareDiluted"),
             ("Dividend Per Share", "CommonStockDividendsPerShareDeclared"),
-            ("Advertising Expense", "AdvertisingExpense"),
-            ("Income Tax Expense", "IncomeTaxExpenseBenefit"),
-            ("Interest Expense", "InterestExpense"),
+            ("Dividend Per Share (Paid)", "CommonStockDividendsPerShareCashPaid"),
+            ("Shares Outstanding", "CommonStockSharesOutstanding"),
+            ("Shares Issued", "CommonStockSharesIssued"),
+            ("Shares Authorized", "CommonStockSharesAuthorized"),
+        ],
+        "Debt Maturity Schedule": [
+            ("Total Long-term Debt (Gross)", "DebtInstrumentCarryingAmount"),
+            ("Due Year 1", "LongTermDebtMaturitiesRepaymentsOfPrincipalInNextTwelveMonths"),
+            ("Due Year 2", "LongTermDebtMaturitiesRepaymentsOfPrincipalInYearTwo"),
+            ("Due Year 3", "LongTermDebtMaturitiesRepaymentsOfPrincipalInYearThree"),
+            ("Due Year 4", "LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFour"),
+            ("Due Year 5", "LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFive"),
+            ("Due After Year 5", "LongTermDebtMaturitiesRepaymentsOfPrincipalAfterYearFive"),
         ],
     }
 

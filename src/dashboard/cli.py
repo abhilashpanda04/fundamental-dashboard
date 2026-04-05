@@ -150,14 +150,17 @@ def run_dashboard(symbol: str):
                 continue
             sub = Prompt.ask(
                 "Category",
-                choices=["income", "balance", "cashflow", "pershare"],
+                choices=["income", "comprehensive", "assets", "liabilities", "cashflow", "pershare", "debt"],
                 default="income",
             )
             cat_map = {
                 "income": "Income Statement",
-                "balance": "Balance Sheet",
+                "comprehensive": "Comprehensive Income",
+                "assets": "Balance Sheet (Assets)",
+                "liabilities": "Balance Sheet (Liabilities & Equity)",
                 "cashflow": "Cash Flow",
-                "pershare": "Per Share & Other",
+                "pershare": "Per Share & Shares",
+                "debt": "Debt Maturity Schedule",
             }
             render_detailed_financials(edgar_data, cat_map[sub])
 

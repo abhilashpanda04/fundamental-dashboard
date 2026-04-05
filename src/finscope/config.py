@@ -25,7 +25,7 @@ class Config:
     # ── SEC EDGAR ────────────────────────────────────────────────────────
     sec_edgar_email: str = field(
         default_factory=lambda: os.environ.get(
-            "SEC_EDGAR_EMAIL", "fundamental-dashboard-user@example.com"
+            "SEC_EDGAR_EMAIL", "finscope-user@example.com"
         )
     )
 
@@ -57,7 +57,7 @@ class Config:
     @property
     def sec_user_agent(self) -> str:
         """Full User-Agent string required by the SEC fair-access policy."""
-        return f"FundamentalDashboard {self.sec_edgar_email}"
+        return f"Finscope {self.sec_edgar_email}"
 
     @property
     def sec_headers(self) -> dict[str, str]:

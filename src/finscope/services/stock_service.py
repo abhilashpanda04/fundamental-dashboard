@@ -11,10 +11,10 @@ import logging
 
 import pandas as pd
 
-from dashboard.exceptions import DataFetchError, TickerNotFoundError
-from dashboard.models import ComparisonData, KeyRatios
-from dashboard.providers.sec_edgar_provider import SecEdgarProvider
-from dashboard.providers.yahoo_provider import YahooFinanceProvider
+from finscope.exceptions import DataFetchError, TickerNotFoundError
+from finscope.models import ComparisonData, KeyRatios
+from finscope.providers.sec_edgar_provider import SecEdgarProvider
+from finscope.providers.yahoo_provider import YahooFinanceProvider
 
 logger = logging.getLogger(__name__)
 

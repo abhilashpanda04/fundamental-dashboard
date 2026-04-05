@@ -7,7 +7,7 @@ Rich-markup strings or plain strings ready for display.
 
 from __future__ import annotations
 
-from dashboard.config import config
+from finscope.config import config
 
 # ── Sparkline ─────────────────────────────────────────────────────────────────
 

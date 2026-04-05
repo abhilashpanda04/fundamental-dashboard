@@ -1,13 +1,13 @@
 """Backward-compatible ui module.
 
-All symbols are re-exported from the new ``dashboard.ui`` package.
+All symbols are re-exported from the new ``finscope.ui`` package.
 
 .. deprecated::
-    Import from ``dashboard.ui`` (the package) directly.
+    Import from ``finscope.ui`` (the package) directly.
 """
 
-from dashboard.ui.formatters import make_sparkline as _make_sparkline  # noqa: F401
-from dashboard.ui.renderers import (  # noqa: F401
+from finscope.ui.formatters import make_sparkline as _make_sparkline  # noqa: F401
+from finscope.ui.renderers import (  # noqa: F401
     export_to_html,
     render_analyst_recommendations,
     render_comparison,

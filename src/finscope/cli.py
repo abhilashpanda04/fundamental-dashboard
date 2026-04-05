@@ -20,9 +20,9 @@ from rich.console import Console
 from rich.prompt import IntPrompt, Prompt
 from rich.rule import Rule
 
-from dashboard.exceptions import DataFetchError, TickerNotFoundError
-from dashboard.services import FundAnalysisService, StockAnalysisService
-from dashboard.ui import (
+from finscope.exceptions import DataFetchError, TickerNotFoundError
+from finscope.services import FundAnalysisService, StockAnalysisService
+from finscope.ui import (
     export_to_html,
     make_sparkline,
     render_analyst_recommendations,
@@ -506,14 +506,14 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Terminal-based stock fundamental analysis dashboard."
+        description="Finscope — terminal-based financial research tool."
     )
     parser.add_argument("symbol", nargs="?", help="Stock ticker symbol (e.g., AAPL, MSFT)")
     args = parser.parse_args()
 
     console.print(Rule("Fundamental Dashboard", style="bold blue"))
     console.print(
-        "[dim]A terminal-based stock analysis tool powered by Yahoo Finance and Rich[/dim]\n"
+        "[dim]Finscope — a terminal-based financial research tool powered by Yahoo Finance, SEC EDGAR, and Rich[/dim]\n"
     )
 
     while True:

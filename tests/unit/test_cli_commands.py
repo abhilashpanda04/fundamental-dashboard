@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from dashboard.cli import (
+from finscope.cli import (
     BalanceSheetCommand,
     CashFlowCommand,
     ChangeTickerCommand,
@@ -19,7 +19,7 @@ from dashboard.cli import (
     OverviewCommand,
     _build_registry,
 )
-from dashboard.services import FundAnalysisService, StockAnalysisService
+from finscope.services import FundAnalysisService, StockAnalysisService
 
 
 @pytest.fixture
@@ -100,8 +100,8 @@ class TestOverviewCommand:
     def test_execute_calls_render_functions(self, ctx):
         cmd = OverviewCommand()
         with (
-            patch("dashboard.cli.render_header") as mock_header,
-            patch("dashboard.cli.render_description") as mock_desc,
+            patch("finscope.cli.render_header") as mock_header,
+            patch("finscope.cli.render_description") as mock_desc,
         ):
             cmd.execute(ctx)
         mock_header.assert_called_once_with(ctx.info, ctx.sparkline)
@@ -111,7 +111,7 @@ class TestOverviewCommand:
 class TestKeyRatiosCommand:
     def test_execute_calls_render_ratios(self, ctx, mock_stock_service):
         cmd = KeyRatiosCommand()
-        with patch("dashboard.cli.render_ratios") as mock_render:
+        with patch("finscope.cli.render_ratios") as mock_render:
             cmd.execute(ctx)
         mock_render.assert_called_once()
         mock_stock_service.get_key_ratios.assert_called_once_with(ctx.info)
@@ -121,7 +121,7 @@ class TestNewsCommand:
     def test_execute_fetches_and_renders_news(self, ctx, mock_stock_service, sample_news):
         mock_stock_service.get_news.return_value = sample_news
         cmd = NewsCommand()
-        with patch("dashboard.cli.render_news") as mock_render:
+        with patch("finscope.cli.render_news") as mock_render:
             cmd.execute(ctx)
         mock_stock_service.get_news.assert_called_once_with("AAPL")
         mock_render.assert_called_once_with(sample_news)
@@ -130,7 +130,7 @@ class TestNewsCommand:
 class TestIncomeStatementCommand:
     def test_execute_calls_render_financials(self, ctx, mock_stock_service, sample_price_df):
         cmd = IncomeStatementCommand()
-        with patch("dashboard.cli.render_financials") as mock_render:
+        with patch("finscope.cli.render_financials") as mock_render:
             cmd.execute(ctx)
         mock_render.assert_called_once_with(sample_price_df, "Income Statement")
 
@@ -138,7 +138,7 @@ class TestIncomeStatementCommand:
 class TestBalanceSheetCommand:
     def test_execute_calls_render_financials(self, ctx, mock_stock_service, sample_price_df):
         cmd = BalanceSheetCommand()
-        with patch("dashboard.cli.render_financials") as mock_render:
+        with patch("finscope.cli.render_financials") as mock_render:
             cmd.execute(ctx)
         mock_render.assert_called_once_with(sample_price_df, "Balance Sheet")
 
@@ -146,13 +146,13 @@ class TestBalanceSheetCommand:
 class TestCashFlowCommand:
     def test_execute_calls_render_financials(self, ctx, mock_stock_service, sample_price_df):
         cmd = CashFlowCommand()
-        with patch("dashboard.cli.render_financials") as mock_render:
+        with patch("finscope.cli.render_financials") as mock_render:
             cmd.execute(ctx)
         mock_render.assert_called_once_with(sample_price_df, "Cash Flow Statement")
 
 
 class TestChangeTickerCommand:
     def test_is_a_dashboard_command(self):
-        from dashboard.cli import DashboardCommand
+        from finscope.cli import DashboardCommand
         cmd = ChangeTickerCommand()
         assert isinstance(cmd, DashboardCommand)

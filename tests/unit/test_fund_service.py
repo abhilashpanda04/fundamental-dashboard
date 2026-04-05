@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from dashboard.providers.mfapi_provider import MfapiProvider
-from dashboard.services.fund_service import FundAnalysisService
+from finscope.providers.mfapi_provider import MfapiProvider
+from finscope.services.fund_service import FundAnalysisService
 
 
 @pytest.fixture
@@ -53,7 +53,7 @@ class TestGetIndiaFundDetail:
         assert result["meta"]["scheme_name"] == "SBI Small Cap"
 
     def test_returns_none_on_fund_not_found(self, service, mock_provider):
-        from dashboard.exceptions import FundNotFoundError
+        from finscope.exceptions import FundNotFoundError
         mock_provider.get_fund_detail.side_effect = FundNotFoundError("INVALID")
         result = service.get_india_fund_detail("INVALID")
         assert result is None

@@ -12,8 +12,8 @@ import logging
 import pandas as pd
 import yfinance as yf
 
-from dashboard.exceptions import DataFetchError, TickerNotFoundError
-from dashboard.providers.base import StockDataProvider
+from finscope.exceptions import DataFetchError, TickerNotFoundError
+from finscope.providers.base import StockDataProvider
 
 logger = logging.getLogger(__name__)
 

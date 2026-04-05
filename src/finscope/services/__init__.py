@@ -5,7 +5,7 @@ high-level API to the CLI and UI layers.  The service layer is the only
 place that is allowed to call providers directly.
 """
 
-from dashboard.services.stock_service import StockAnalysisService
-from dashboard.services.fund_service import FundAnalysisService
+from finscope.services.stock_service import StockAnalysisService
+from finscope.services.fund_service import FundAnalysisService
 
 __all__ = ["StockAnalysisService", "FundAnalysisService"]

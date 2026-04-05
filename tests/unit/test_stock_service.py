@@ -7,11 +7,11 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from dashboard.exceptions import DataFetchError, TickerNotFoundError
-from dashboard.models import ComparisonData, KeyRatios
-from dashboard.providers.sec_edgar_provider import SecEdgarProvider
-from dashboard.providers.yahoo_provider import YahooFinanceProvider
-from dashboard.services.stock_service import StockAnalysisService
+from finscope.exceptions import DataFetchError, TickerNotFoundError
+from finscope.models import ComparisonData, KeyRatios
+from finscope.providers.sec_edgar_provider import SecEdgarProvider
+from finscope.providers.yahoo_provider import YahooFinanceProvider
+from finscope.services.stock_service import StockAnalysisService
 
 
 @pytest.fixture

@@ -1,10 +1,10 @@
 """Backward-compatible data access layer.
 
 All functions delegate to the new ``YahooFinanceProvider``.  Existing code
-that imports from ``dashboard.data`` continues to work without modification.
+that imports from ``finscope.data`` continues to work without modification.
 
 .. deprecated::
-    Prefer importing from ``dashboard.providers.yahoo_provider`` directly.
+    Prefer importing from ``finscope.providers.yahoo_provider`` directly.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from __future__ import annotations
 import yfinance as yf
 import pandas as pd
 
-from dashboard.providers.yahoo_provider import YahooFinanceProvider
+from finscope.providers.yahoo_provider import YahooFinanceProvider
 
 _provider = YahooFinanceProvider()
 
@@ -83,7 +83,7 @@ def get_sparkline_data(ticker: yf.Ticker, period: str = "3mo") -> list[float]:
 
 
 def get_key_ratios(info: dict) -> dict:
-    from dashboard.models import KeyRatios
+    from finscope.models import KeyRatios
     return KeyRatios.from_info(info).to_display_dict()
 
 

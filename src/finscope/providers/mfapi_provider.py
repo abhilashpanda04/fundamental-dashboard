@@ -14,9 +14,9 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-from dashboard.config import config
-from dashboard.exceptions import DataFetchError, FundNotFoundError
-from dashboard.providers.base import MutualFundProvider
+from finscope.config import config
+from finscope.exceptions import DataFetchError, FundNotFoundError
+from finscope.providers.base import MutualFundProvider
 
 logger = logging.getLogger(__name__)
 

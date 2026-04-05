@@ -12,8 +12,8 @@ from functools import lru_cache
 
 import requests
 
-from dashboard.config import config
-from dashboard.exceptions import CIKNotFoundError, DataFetchError
+from finscope.config import config
+from finscope.exceptions import CIKNotFoundError, DataFetchError
 
 logger = logging.getLogger(__name__)
 

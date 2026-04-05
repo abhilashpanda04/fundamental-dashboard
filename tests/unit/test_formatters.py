@@ -1,4 +1,4 @@
-"""Unit tests for ``dashboard.ui.formatters``.
+"""Unit tests for ``finscope.ui.formatters``.
 
 All formatter functions are pure, so no mocking is needed.
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from dashboard.ui.formatters import (
+from finscope.ui.formatters import (
     format_currency,
     format_number,
     format_pct,

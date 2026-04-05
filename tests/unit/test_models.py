@@ -1,10 +1,10 @@
-"""Unit tests for domain models in ``dashboard.models``."""
+"""Unit tests for domain models in ``finscope.models``."""
 
 from __future__ import annotations
 
 import pytest
 
-from dashboard.models import (
+from finscope.models import (
     ComparisonData,
     FundReturn,
     IndiaFundMeta,

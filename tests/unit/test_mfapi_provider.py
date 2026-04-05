@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dashboard.exceptions import FundNotFoundError
-from dashboard.providers.mfapi_provider import MfapiProvider, POPULAR_FUNDS
+from finscope.exceptions import FundNotFoundError
+from finscope.providers.mfapi_provider import MfapiProvider, POPULAR_FUNDS
 
 
 @pytest.fixture
@@ -42,7 +42,7 @@ class TestSearchFunds:
         ]
         mock_response.raise_for_status = MagicMock()
 
-        with patch("dashboard.providers.mfapi_provider.requests.get", return_value=mock_response):
+        with patch("finscope.providers.mfapi_provider.requests.get", return_value=mock_response):
             results = provider.search_funds("SBI")
 
         assert len(results) == 2
@@ -58,7 +58,7 @@ class TestSearchFunds:
         ]
 
         with (
-            patch("dashboard.providers.mfapi_provider.requests.get", return_value=mock_response),
+            patch("finscope.providers.mfapi_provider.requests.get", return_value=mock_response),
             patch.object(provider, "_all_india_funds", return_value=all_funds),
         ):
             results = provider.search_funds("SBI")
@@ -74,7 +74,7 @@ class TestSearchFunds:
         mock_response.raise_for_status.side_effect = Exception("err")
 
         with (
-            patch("dashboard.providers.mfapi_provider.requests.get", return_value=mock_response),
+            patch("finscope.providers.mfapi_provider.requests.get", return_value=mock_response),
             patch.object(provider, "_all_india_funds", return_value=all_funds),
         ):
             results = provider.search_funds("sbi small cap")
@@ -95,7 +95,7 @@ class TestGetFundDetail:
         mock_response.json.return_value = fund_detail
         mock_response.raise_for_status = MagicMock()
 
-        with patch("dashboard.providers.mfapi_provider.requests.get", return_value=mock_response):
+        with patch("finscope.providers.mfapi_provider.requests.get", return_value=mock_response):
             result = provider.get_fund_detail("125497")
 
         assert result["meta"]["scheme_name"] == "SBI Small Cap Fund"
@@ -105,7 +105,7 @@ class TestGetFundDetail:
         mock_response = MagicMock()
         mock_response.raise_for_status.side_effect = Exception("404")
 
-        with patch("dashboard.providers.mfapi_provider.requests.get", return_value=mock_response):
+        with patch("finscope.providers.mfapi_provider.requests.get", return_value=mock_response):
             with pytest.raises(FundNotFoundError):
                 provider.get_fund_detail("INVALID_CODE")
 

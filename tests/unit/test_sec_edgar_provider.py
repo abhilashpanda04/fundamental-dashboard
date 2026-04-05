@@ -6,8 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from dashboard.exceptions import CIKNotFoundError, DataFetchError
-from dashboard.providers.sec_edgar_provider import SecEdgarProvider
+from finscope.exceptions import CIKNotFoundError, DataFetchError
+from finscope.providers.sec_edgar_provider import SecEdgarProvider
 
 
 @pytest.fixture
@@ -158,7 +158,7 @@ class TestGetRecentFilings:
 
         with (
             patch.object(provider, "_load_ticker_map", return_value=mock_ticker_map),
-            patch("dashboard.providers.sec_edgar_provider.requests.get", return_value=mock_response),
+            patch("finscope.providers.sec_edgar_provider.requests.get", return_value=mock_response),
         ):
             filings = provider.get_recent_filings("AAPL", count=2)
 
@@ -184,7 +184,7 @@ class TestGetRecentFilings:
 
         with (
             patch.object(provider, "_load_ticker_map", return_value=mock_ticker_map),
-            patch("dashboard.providers.sec_edgar_provider.requests.get", return_value=mock_response),
+            patch("finscope.providers.sec_edgar_provider.requests.get", return_value=mock_response),
         ):
             filings = provider.get_recent_filings("AAPL", count=1)
 

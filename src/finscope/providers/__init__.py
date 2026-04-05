@@ -5,10 +5,10 @@ Providers implement the abstract ``StockDataProvider`` interface so that
 the service layer can swap them transparently (Strategy Pattern).
 """
 
-from dashboard.providers.base import StockDataProvider, MutualFundProvider
-from dashboard.providers.yahoo_provider import YahooFinanceProvider
-from dashboard.providers.sec_edgar_provider import SecEdgarProvider
-from dashboard.providers.mfapi_provider import MfapiProvider
+from finscope.providers.base import StockDataProvider, MutualFundProvider
+from finscope.providers.yahoo_provider import YahooFinanceProvider
+from finscope.providers.sec_edgar_provider import SecEdgarProvider
+from finscope.providers.mfapi_provider import MfapiProvider
 
 __all__ = [
     "StockDataProvider",

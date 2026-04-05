@@ -3,15 +3,15 @@
 All functions delegate to the new ``SecEdgarProvider``.
 
 .. deprecated::
-    Prefer importing from ``dashboard.providers.sec_edgar_provider`` directly.
+    Prefer importing from ``finscope.providers.sec_edgar_provider`` directly.
 """
 
 from __future__ import annotations
 
 from functools import lru_cache
 
-from dashboard.exceptions import CIKNotFoundError, DataFetchError
-from dashboard.providers.sec_edgar_provider import SecEdgarProvider
+from finscope.exceptions import CIKNotFoundError, DataFetchError
+from finscope.providers.sec_edgar_provider import SecEdgarProvider
 
 _provider = SecEdgarProvider()
 

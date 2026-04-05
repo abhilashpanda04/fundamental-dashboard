@@ -1,8 +1,8 @@
 """UI package — Builder Pattern for tables, pure formatting helpers, and renderers."""
 
-from dashboard.ui.formatters import format_number, format_pct, format_currency, make_sparkline
-from dashboard.ui.builders import TableBuilder
-from dashboard.ui.renderers import (
+from finscope.ui.formatters import format_number, format_pct, format_currency, make_sparkline
+from finscope.ui.builders import TableBuilder
+from finscope.ui.renderers import (
     render_header,
     render_description,
     render_ratios,

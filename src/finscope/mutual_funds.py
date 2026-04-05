@@ -3,12 +3,12 @@
 All functions delegate to ``MfapiProvider``.
 
 .. deprecated::
-    Prefer importing from ``dashboard.providers.mfapi_provider`` directly.
+    Prefer importing from ``finscope.providers.mfapi_provider`` directly.
 """
 
 from __future__ import annotations
 
-from dashboard.providers.mfapi_provider import POPULAR_FUNDS, MfapiProvider
+from finscope.providers.mfapi_provider import POPULAR_FUNDS, MfapiProvider
 
 _provider = MfapiProvider()
 

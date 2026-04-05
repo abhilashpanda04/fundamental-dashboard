@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import logging
 
-from dashboard.exceptions import FundNotFoundError
-from dashboard.providers.mfapi_provider import MfapiProvider
+from finscope.exceptions import FundNotFoundError
+from finscope.providers.mfapi_provider import MfapiProvider
 
 logger = logging.getLogger(__name__)
 
@@ -65,5 +65,5 @@ class FundAnalysisService:
     @property
     def popular_fund_regions(self) -> list[str]:
         """Return all available region keys."""
-        from dashboard.providers.mfapi_provider import POPULAR_FUNDS
+        from finscope.providers.mfapi_provider import POPULAR_FUNDS
         return list(POPULAR_FUNDS.keys())

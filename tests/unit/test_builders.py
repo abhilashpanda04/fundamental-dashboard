@@ -6,7 +6,7 @@ import pytest
 from rich import box
 from rich.table import Table
 
-from dashboard.ui.builders import (
+from finscope.ui.builders import (
     TableBuilder,
     comparison_table,
     financial_table,

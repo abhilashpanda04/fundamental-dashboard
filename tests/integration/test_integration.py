@@ -29,7 +29,7 @@ pytestmark = pytest.mark.integration
 class TestYahooIntegration:
     @pytest.fixture(scope="class")
     def provider(self):
-        from dashboard.providers.yahoo_provider import YahooFinanceProvider
+        from finscope.providers.yahoo_provider import YahooFinanceProvider
         return YahooFinanceProvider()
 
     def test_get_info_aapl(self, provider):
@@ -56,7 +56,7 @@ class TestYahooIntegration:
         assert isinstance(news, list)
 
     def test_ticker_not_found_raises_error(self, provider):
-        from dashboard.exceptions import TickerNotFoundError
+        from finscope.exceptions import TickerNotFoundError
         with pytest.raises(TickerNotFoundError):
             provider.get_info("ZZZZNOTAREALTICKER99")
 
@@ -77,7 +77,7 @@ class TestYahooIntegration:
 class TestSecEdgarIntegration:
     @pytest.fixture(scope="class")
     def provider(self):
-        from dashboard.providers.sec_edgar_provider import SecEdgarProvider
+        from finscope.providers.sec_edgar_provider import SecEdgarProvider
         return SecEdgarProvider()
 
     def test_get_cik_apple(self, provider):
@@ -90,7 +90,7 @@ class TestSecEdgarIntegration:
         assert cik.lstrip("0") == "789019"
 
     def test_get_cik_not_found_raises(self, provider):
-        from dashboard.exceptions import CIKNotFoundError
+        from finscope.exceptions import CIKNotFoundError
         with pytest.raises(CIKNotFoundError):
             provider.get_cik("ZZZZNOTAREALTICKER99")
 
@@ -129,7 +129,7 @@ class TestSecEdgarIntegration:
 class TestMfapiIntegration:
     @pytest.fixture(scope="class")
     def provider(self):
-        from dashboard.providers.mfapi_provider import MfapiProvider
+        from finscope.providers.mfapi_provider import MfapiProvider
         return MfapiProvider()
 
     def test_search_funds_returns_results(self, provider):
@@ -166,11 +166,11 @@ class TestMfapiIntegration:
 class TestStockServiceIntegration:
     @pytest.fixture(scope="class")
     def service(self):
-        from dashboard.services.stock_service import StockAnalysisService
+        from finscope.services.stock_service import StockAnalysisService
         return StockAnalysisService()
 
     def test_get_info_and_key_ratios_aapl(self, service):
-        from dashboard.models import KeyRatios
+        from finscope.models import KeyRatios
         info = service.get_info("AAPL")
         ratios = service.get_key_ratios(info)
         assert isinstance(ratios, KeyRatios)
@@ -179,7 +179,7 @@ class TestStockServiceIntegration:
         assert len(populated) > 5
 
     def test_get_comparison_data_returns_typed_objects(self, service):
-        from dashboard.models import ComparisonData
+        from finscope.models import ComparisonData
         result = service.get_comparison_data(["AAPL", "MSFT"])
         assert len(result) >= 1
         assert all(isinstance(cd, ComparisonData) for cd in result)

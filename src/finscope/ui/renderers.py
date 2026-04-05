@@ -15,9 +15,9 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.text import Text
 
-from dashboard.config import config
-from dashboard.ui.builders import TableBuilder, comparison_table, financial_table, simple_table
-from dashboard.ui.formatters import (
+from finscope.config import config
+from finscope.ui.builders import TableBuilder, comparison_table, financial_table, simple_table
+from finscope.ui.formatters import (
     format_currency,
     format_number,
     format_pct,

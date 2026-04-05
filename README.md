@@ -27,8 +27,8 @@ Scope deeply into any stock, ETF, or mutual fund — all from your terminal, wit
 ## Installation
 
 ```bash
-git clone https://github.com/abhilashpanda04/fundamental-dashboard.git
-cd fundamental-dashboard
+git clone https://github.com/abhilashpanda04/finscope.git
+cd finscope
 uv sync              # or: pip install -e .
 ```
 

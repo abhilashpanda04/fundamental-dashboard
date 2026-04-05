@@ -26,9 +26,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/abhilashpanda04/fundamental-dashboard"
-Repository = "https://github.com/abhilashpanda04/fundamental-dashboard"
-Issues = "https://github.com/abhilashpanda04/fundamental-dashboard/issues"
+Homepage = "https://github.com/abhilashpanda04/finscope"
+Repository = "https://github.com/abhilashpanda04/finscope"
+Issues = "https://github.com/abhilashpanda04/finscope/issues"
 
 [project.scripts]
 finscope = "finscope.cli:main"

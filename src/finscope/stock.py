@@ -198,6 +198,53 @@ class Stock:
         )
         return output_path
 
+    # ── AI-powered analysis (requires API key) ────────────────────────────────
+
+    async def analyze(self) -> "StockAnalysis":
+        """Run a comprehensive AI analysis of this stock.
+
+        Requires an LLM provider API key in the environment.
+        See :mod:`finscope.ai` for details.
+
+        Returns:
+            A :class:`~finscope.ai.models.StockAnalysis` with summary,
+            bull/bear cases, risk factors, and sentiment.
+
+        Example::
+
+            analysis = await aapl.analyze()
+            print(analysis.summary)
+            print(analysis.sentiment)  # 'Bullish', 'Neutral', etc.
+        """
+        from finscope.ai import analyze_stock
+        return await analyze_stock(self._symbol)
+
+    async def ask(self, question: str) -> str:
+        """Ask any question about this stock — the AI fetches data as needed.
+
+        Args:
+            question: Natural language question.
+
+        Returns:
+            The AI agent's response.
+
+        Example::
+
+            answer = await aapl.ask("What's Apple's debt situation?")
+        """
+        from finscope.ai import ask_stock
+        return await ask_stock(self._symbol, question)
+
+    async def summarize_filings(self) -> "FilingSummary":
+        """AI-powered summary of recent SEC filings.
+
+        Returns:
+            A :class:`~finscope.ai.models.FilingSummary` with key
+            highlights, risk factors, and management outlook.
+        """
+        from finscope.ai import summarize_filings
+        return await summarize_filings(self._symbol)
+
     # ── Dunder helpers ────────────────────────────────────────────────────────
 
     def __repr__(self) -> str:

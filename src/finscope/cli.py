@@ -71,7 +71,7 @@ _KEYWORDS = {"compare", "watchlist", "export", "funds"}
 _STOCK_SUBCOMMANDS = {
     "ratios", "price", "financials", "balance-sheet", "cashflow",
     "news", "analysts", "holders", "sec-financials", "sec-filings",
-    "insiders", "overview",
+    "insiders", "overview", "analyze", "ask", "summarize-filings",
 }
 
 _SEC_CAT_MAP = {
@@ -189,6 +189,162 @@ def cmd_export(symbol: str, output: str | None = None) -> None:
     s = _load_stock(symbol)
     path = s.export_html(output)
     console.print(f"\n[bold green]✓ Report exported to {path}[/bold green]")
+
+
+# ── AI commands ───────────────────────────────────────────────────────────────
+
+def _require_ai() -> None:
+    """Check AI availability and print a helpful error if not configured."""
+    from finscope.ai.config import is_ai_available
+    if not is_ai_available():
+        console.print(
+            "\n[red bold]✗ AI features require an LLM provider API key.[/red bold]\n"
+            "[dim]Set one of these environment variables:\n"
+            "  export OPENAI_API_KEY=sk-...\n"
+            "  export ANTHROPIC_API_KEY=sk-ant-...\n"
+            "  export GEMINI_API_KEY=...\n"
+            "  export GROQ_API_KEY=gsk_...\n"
+            "  export MISTRAL_API_KEY=...\n\n"
+            "Or set FINSCOPE_AI_MODEL explicitly.[/dim]"
+        )
+        sys.exit(1)
+
+
+def _run_async(coro):
+    """Run an async coroutine from sync CLI code."""
+    import asyncio
+    return asyncio.run(coro)
+
+
+def cmd_analyze(symbol: str) -> None:
+    """AI-powered comprehensive stock analysis."""
+    _require_ai()
+    from finscope.ai.config import get_ai_status
+    status = get_ai_status()
+    console.print(f"\n[dim]AI Provider: {status['provider']}[/dim]")
+    console.print(f"Analyzing [bold cyan]{symbol}[/bold cyan]... (this may take 15-30 seconds)\n")
+
+    from finscope.ai import analyze_stock
+    analysis = _run_async(analyze_stock(symbol))
+
+    # Render structured output
+    console.print(Rule(f"AI Analysis: {symbol}", style="bold magenta"))
+    console.print(f"\n[bold]Summary[/bold]")
+    console.print(f"  {analysis.summary}\n")
+
+    console.print(f"[bold green]Bull Case[/bold green]")
+    for point in analysis.bull_case:
+        console.print(f"  [green]+ {point}[/green]")
+
+    console.print(f"\n[bold red]Bear Case[/bold red]")
+    for point in analysis.bear_case:
+        console.print(f"  [red]- {point}[/red]")
+
+    console.print(f"\n[bold]Key Metrics[/bold]")
+    console.print(f"  {analysis.key_metrics_commentary}\n")
+
+    console.print(f"[bold]Financial Health[/bold]")
+    console.print(f"  {analysis.financial_health}\n")
+
+    console.print(f"[bold]Growth Outlook[/bold]")
+    console.print(f"  {analysis.growth_outlook}\n")
+
+    console.print(f"[bold yellow]Risk Factors[/bold yellow]")
+    for risk in analysis.risk_factors:
+        console.print(f"  [yellow]⚠ {risk}[/yellow]")
+
+    sentiment_colors = {
+        "Bullish": "bold green", "Moderately Bullish": "green",
+        "Neutral": "yellow", "Moderately Bearish": "red",
+        "Bearish": "bold red",
+    }
+    s_color = sentiment_colors.get(analysis.sentiment, "white")
+    console.print(f"\n[bold]Sentiment:[/bold] [{s_color}]{analysis.sentiment}[/{s_color}]")
+    console.print(f"[bold]Confidence:[/bold] {analysis.confidence}\n")
+
+
+def cmd_ask(symbol: str, question: str) -> None:
+    """Ask any question about a stock."""
+    _require_ai()
+    from finscope.ai.config import get_ai_status
+    status = get_ai_status()
+    console.print(f"\n[dim]AI Provider: {status['provider']}[/dim]")
+    console.print(f"Thinking about [bold cyan]{symbol}[/bold cyan]...\n")
+
+    from finscope.ai import ask_stock
+    answer = _run_async(ask_stock(symbol, question))
+
+    console.print(Rule(f"Q: {question}", style="cyan"))
+    console.print(f"\n{answer}\n")
+
+
+def cmd_ai_compare(symbols: list[str]) -> None:
+    """AI-powered multi-stock comparison."""
+    if len(symbols) < 2:
+        console.print("[red]Please provide at least 2 tickers to compare.[/red]")
+        return
+    _require_ai()
+    from finscope.ai.config import get_ai_status
+    status = get_ai_status()
+    console.print(f"\n[dim]AI Provider: {status['provider']}[/dim]")
+    console.print(f"Comparing [bold cyan]{', '.join(symbols)}[/bold cyan]... (this may take 20-40 seconds)\n")
+
+    from finscope.ai import ai_compare_stocks
+    insight = _run_async(ai_compare_stocks(*symbols))
+
+    console.print(Rule(f"AI Comparison: {', '.join(symbols)}", style="bold magenta"))
+    console.print(f"\n[bold]Overview[/bold]")
+    console.print(f"  {insight.overview}\n")
+
+    console.print(f"[bold]Rankings[/bold]")
+    for i, rank in enumerate(insight.rankings, 1):
+        console.print(f"  {i}. {rank}")
+
+    console.print(f"\n[bold]Valuation[/bold]")
+    console.print(f"  {insight.valuation_comparison}\n")
+
+    console.print(f"[bold]Growth[/bold]")
+    console.print(f"  {insight.growth_comparison}\n")
+
+    console.print(f"[bold]Risk[/bold]")
+    console.print(f"  {insight.risk_comparison}\n")
+
+    console.print(f"[bold]Best For[/bold]")
+    for profile, rec in insight.best_for.items():
+        console.print(f"  [cyan]{profile}:[/cyan] {rec}")
+    console.print()
+
+
+def cmd_summarize_filings(symbol: str) -> None:
+    """AI-powered SEC filing summary."""
+    _require_ai()
+    from finscope.ai.config import get_ai_status
+    status = get_ai_status()
+    console.print(f"\n[dim]AI Provider: {status['provider']}[/dim]")
+    console.print(f"Analyzing SEC filings for [bold cyan]{symbol}[/bold cyan]...\n")
+
+    from finscope.ai import summarize_filings
+    summary = _run_async(summarize_filings(symbol))
+
+    console.print(Rule(f"SEC Filing Summary: {summary.company}", style="bold magenta"))
+    console.print(f"\n[dim]Filings analyzed: {', '.join(summary.filing_types_covered)}[/dim]\n")
+
+    console.print(f"[bold]Key Highlights[/bold]")
+    for h in summary.key_highlights:
+        console.print(f"  • {h}")
+
+    console.print(f"\n[bold yellow]Risk Factors[/bold yellow]")
+    for r in summary.risk_factors:
+        console.print(f"  [yellow]⚠ {r}[/yellow]")
+
+    console.print(f"\n[bold]Management Outlook[/bold]")
+    console.print(f"  {summary.management_outlook}\n")
+
+    if summary.notable_changes:
+        console.print(f"[bold]Notable Changes[/bold]")
+        for c in summary.notable_changes:
+            console.print(f"  → {c}")
+    console.print()
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -609,6 +765,12 @@ examples:
   finscope export AAPL              HTML report
   finscope funds                    Mutual funds explorer
   finscope AAPL -i                  Interactive menu mode
+
+AI-powered analysis (requires API key):
+  finscope AAPL analyze               Comprehensive bull/bear analysis
+  finscope AAPL ask "Is it overvalued?"  Ask anything about a stock
+  finscope compare AAPL MSFT --analyze   AI comparison insight
+  finscope AAPL summarize-filings     SEC filing summary
 """
 
 
@@ -650,6 +812,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="version",
         version=f"finscope {fs.__version__}",
     )
+    parser.add_argument(
+        "--analyze",
+        action="store_true",
+        help="Use AI analysis (for compare command)",
+    )
     return parser
 
 
@@ -681,7 +848,10 @@ def _dispatch(parsed: argparse.Namespace) -> None:
     # ── Top-level keyword commands ────────────────────────────────────────
     if first == "compare":
         symbols = [s.upper() for s in args[1:]]
-        cmd_compare(symbols)
+        if parsed.analyze:
+            cmd_ai_compare(symbols)
+        else:
+            cmd_compare(symbols)
         return
 
     if first == "watchlist":
@@ -730,7 +900,10 @@ def _dispatch(parsed: argparse.Namespace) -> None:
         "holders":        lambda: cmd_holders(symbol),
         "sec-financials": lambda: cmd_sec_financials(symbol, parsed.category),
         "sec-filings":    lambda: cmd_sec_filings(symbol),
-        "insiders":       lambda: cmd_insiders(symbol),
+        "insiders":          lambda: cmd_insiders(symbol),
+        "analyze":           lambda: cmd_analyze(symbol),
+        "ask":               lambda: cmd_ask(symbol, " ".join(args[2:]) if len(args) > 2 else ""),
+        "summarize-filings": lambda: cmd_summarize_filings(symbol),
     }
 
     handler = dispatch.get(subcommand)

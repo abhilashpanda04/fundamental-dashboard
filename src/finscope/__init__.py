@@ -145,6 +145,26 @@ def compare(*symbols: str) -> list[ComparisonData]:
     return svc.get_comparison_data(list(symbols))
 
 
+async def ai_compare(*symbols: str):
+    """AI-powered comparison of multiple stocks.
+
+    Requires an LLM provider API key.  See :mod:`finscope.ai`.
+
+    Args:
+        *symbols: Two or more ticker symbols.
+
+    Returns:
+        A :class:`~finscope.ai.models.ComparisonInsight`.
+
+    Example::
+
+        insight = await finscope.ai_compare("AAPL", "MSFT", "GOOGL")
+        print(insight.overview)
+    """
+    from finscope.ai import ai_compare_stocks
+    return await ai_compare_stocks(*symbols)
+
+
 # ── Public API surface ────────────────────────────────────────────────────────
 
 __all__ = [
@@ -154,6 +174,7 @@ __all__ = [
     "stock",
     "fund",
     "compare",
+    "ai_compare",
     # Core classes
     "Stock",
     "Fund",

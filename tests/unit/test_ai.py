@@ -205,6 +205,74 @@ class TestAgentFunctions:
         assert issubclass(AINotAvailableError, FinScopeError)
 
 
+# ── Prompt loader tests ───────────────────────────────────────────────────────
+
+
+class TestPromptLoader:
+    def test_load_builtin_analyst(self):
+        from finscope.ai.prompt_loader import load_prompt
+        prompt = load_prompt("analyst")
+        assert "equity research analyst" in prompt.lower()
+        assert len(prompt) > 50
+
+    def test_load_builtin_qa(self):
+        from finscope.ai.prompt_loader import load_prompt
+        prompt = load_prompt("qa")
+        assert "financial analyst" in prompt.lower()
+
+    def test_load_builtin_comparison(self):
+        from finscope.ai.prompt_loader import load_prompt
+        prompt = load_prompt("comparison")
+        assert "comparative" in prompt.lower() or "comparison" in prompt.lower()
+
+    def test_load_builtin_filing(self):
+        from finscope.ai.prompt_loader import load_prompt
+        prompt = load_prompt("filing")
+        assert "sec" in prompt.lower()
+
+    def test_missing_prompt_raises(self):
+        from finscope.ai.prompt_loader import load_prompt
+        load_prompt.cache_clear()
+        with pytest.raises(FileNotFoundError):
+            load_prompt("nonexistent_prompt_xyz")
+
+    def test_override_dir(self, tmp_path, monkeypatch):
+        from finscope.ai.prompt_loader import load_prompt
+        load_prompt.cache_clear()
+
+        # Create override prompt
+        override = tmp_path / "analyst.md"
+        override.write_text("You are a custom analyst.")
+        monkeypatch.setenv("FINSCOPE_PROMPTS_DIR", str(tmp_path))
+
+        prompt = load_prompt("analyst")
+        assert prompt == "You are a custom analyst."
+
+        # Clean up
+        load_prompt.cache_clear()
+        monkeypatch.delenv("FINSCOPE_PROMPTS_DIR")
+
+    def test_override_falls_back_to_builtin(self, tmp_path, monkeypatch):
+        from finscope.ai.prompt_loader import load_prompt
+        load_prompt.cache_clear()
+
+        # Override dir exists but doesn't have "qa.md"
+        monkeypatch.setenv("FINSCOPE_PROMPTS_DIR", str(tmp_path))
+
+        prompt = load_prompt("qa")
+        assert "financial analyst" in prompt.lower()  # Built-in loaded
+
+        load_prompt.cache_clear()
+        monkeypatch.delenv("FINSCOPE_PROMPTS_DIR")
+
+    def test_prompts_are_stripped(self):
+        from finscope.ai.prompt_loader import load_prompt
+        load_prompt.cache_clear()
+        prompt = load_prompt("analyst")
+        assert not prompt.startswith("\n")
+        assert not prompt.endswith("\n")
+
+
 # ── CLI AI command tests ──────────────────────────────────────────────────────
 
 

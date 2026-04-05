@@ -14,6 +14,7 @@ from pydantic_ai import Agent
 
 from finscope.ai.config import get_ai_model
 from finscope.ai.models import ComparisonInsight, FilingSummary, StockAnalysis
+from finscope.ai.prompt_loader import load_prompt
 from finscope.ai.tools import (
     StockContext,
     register_comparison_tools,
@@ -52,66 +53,6 @@ def _require_model() -> str:
     return model
 
 
-# ── System prompts ────────────────────────────────────────────────────────────
-
-_ANALYST_PROMPT = """\
-You are a senior equity research analyst with 20 years of experience.
-You have access to tools that fetch real-time financial data for the stock
-you're analyzing. Use them to gather the data you need, then produce a
-thorough, balanced analysis.
-
-Guidelines:
-- Always call the relevant tools to get actual data before making claims.
-- Base your analysis on the numbers, not assumptions.
-- Be specific — cite actual ratios, margins, growth rates.
-- Consider both bull and bear cases honestly.
-- Compare metrics to typical industry benchmarks when relevant.
-- Flag any data gaps or limitations.
-- Be concise but thorough.
-"""
-
-_QA_PROMPT = """\
-You are a knowledgeable financial analyst assistant. You have access to
-tools that fetch real-time data for the stock being discussed. Use them
-to answer the user's question accurately.
-
-Guidelines:
-- Always fetch relevant data before answering — don't guess.
-- Be specific and cite actual numbers from the data.
-- If the data doesn't support a definitive answer, say so.
-- Keep answers clear and actionable.
-- For complex questions, structure your response with sections.
-"""
-
-_COMPARISON_PROMPT = """\
-You are a senior equity research analyst specializing in comparative
-stock analysis. You have access to tools that fetch data for multiple
-stocks. Use them to build a thorough, data-driven comparison.
-
-Guidelines:
-- Fetch comparison data for all stocks before analyzing.
-- Compare on multiple dimensions: valuation, growth, profitability, risk.
-- Be specific — cite actual numbers side by side.
-- Identify clear winners/losers on each dimension.
-- Consider different investor profiles (value, growth, income, etc.).
-- Be balanced — every stock has strengths and weaknesses.
-"""
-
-_FILING_PROMPT = """\
-You are a securities lawyer and financial analyst specializing in SEC
-filings analysis. You have access to tools that fetch SEC EDGAR data
-including XBRL financials, recent filings, and insider transactions.
-
-Guidelines:
-- Fetch the relevant SEC data using the available tools.
-- Focus on material information that affects investment decisions.
-- Highlight any red flags, unusual items, or significant changes.
-- Summarize management's outlook and forward-looking statements.
-- Note any insider trading patterns.
-- Be specific about which filings you're referencing.
-"""
-
-
 # ── Agent factory functions ───────────────────────────────────────────────────
 
 def _build_analyst_agent() -> Agent[StockContext, StockAnalysis]:
@@ -121,7 +62,7 @@ def _build_analyst_agent() -> Agent[StockContext, StockAnalysis]:
         model,
         deps_type=StockContext,
         result_type=StockAnalysis,
-        system_prompt=_ANALYST_PROMPT,
+        system_prompt=load_prompt("analyst"),
     )
     register_stock_tools(agent)
     return agent
@@ -134,7 +75,7 @@ def _build_qa_agent() -> Agent[StockContext, str]:
         model,
         deps_type=StockContext,
         result_type=str,
-        system_prompt=_QA_PROMPT,
+        system_prompt=load_prompt("qa"),
     )
     register_stock_tools(agent)
     return agent
@@ -147,7 +88,7 @@ def _build_comparison_agent() -> Agent[StockContext, ComparisonInsight]:
         model,
         deps_type=StockContext,
         result_type=ComparisonInsight,
-        system_prompt=_COMPARISON_PROMPT,
+        system_prompt=load_prompt("comparison"),
     )
     register_stock_tools(agent)
     register_comparison_tools(agent)
@@ -161,7 +102,7 @@ def _build_filing_agent() -> Agent[StockContext, FilingSummary]:
         model,
         deps_type=StockContext,
         result_type=FilingSummary,
-        system_prompt=_FILING_PROMPT,
+        system_prompt=load_prompt("filing"),
     )
     register_stock_tools(agent)
     return agent

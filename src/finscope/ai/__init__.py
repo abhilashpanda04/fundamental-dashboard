@@ -35,6 +35,7 @@ Quick start::
 
 from finscope.ai.config import get_ai_model, is_ai_available, get_ai_status
 from finscope.ai.models import StockAnalysis, ComparisonInsight, FilingSummary
+from finscope.ai.prompt_loader import load_prompt
 from finscope.ai.agents import (
     analyze_stock,
     ask_stock,
@@ -47,6 +48,8 @@ __all__ = [
     "get_ai_model",
     "is_ai_available",
     "get_ai_status",
+    # Prompt loader
+    "load_prompt",
     # Output models
     "StockAnalysis",
     "ComparisonInsight",

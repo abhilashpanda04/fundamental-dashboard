@@ -200,6 +200,27 @@ class Stock:
 
     # ── AI-powered analysis (requires API key) ────────────────────────────────
 
+    def valuate(self) -> "StockValuation":
+        """Run all valuation models — pure financial logic, no AI needed.
+
+        Runs Graham Number, DCF, PEG fair value, relative valuation,
+        Piotroski F-Score, and Altman Z-Score, then combines into a
+        composite verdict.
+
+        Returns:
+            A :class:`~finscope.valuation.models.StockValuation`.
+
+        Example::
+
+            v = aapl.valuate()
+            v.verdict              # "Fairly Valued"
+            v.margin_of_safety     # -5.2%
+            v.graham.intrinsic     # 112.45
+            v.piotroski.score      # 7
+        """
+        from finscope.valuation import valuate
+        return valuate(self._symbol)
+
     async def analyze(self) -> "StockAnalysis":
         """Run a comprehensive AI analysis of this stock.
 

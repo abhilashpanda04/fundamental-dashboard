@@ -87,6 +87,9 @@ from finscope.services import FundAnalysisService, StockAnalysisService
 # ── Providers (for dependency injection / testing) ────────────────────────────
 from finscope.providers import MfapiProvider, SecEdgarProvider, YahooFinanceProvider
 
+# ── Valuation engine ──────────────────────────────────────────────────────────
+from finscope.valuation import StockValuation, valuate as valuate_stock
+
 
 # ── Top-level factory functions ───────────────────────────────────────────────
 
@@ -201,4 +204,7 @@ __all__ = [
     "YahooFinanceProvider",
     "SecEdgarProvider",
     "MfapiProvider",
+    # Valuation
+    "StockValuation",
+    "valuate_stock",
 ]

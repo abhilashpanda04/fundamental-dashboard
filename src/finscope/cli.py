@@ -72,6 +72,7 @@ _STOCK_SUBCOMMANDS = {
     "ratios", "price", "financials", "balance-sheet", "cashflow",
     "news", "analysts", "holders", "sec-financials", "sec-filings",
     "insiders", "overview", "analyze", "ask", "summarize-filings",
+    "valuate",
 }
 
 _SEC_CAT_MAP = {
@@ -165,6 +166,109 @@ def cmd_sec_filings(symbol: str) -> None:
 def cmd_insiders(symbol: str) -> None:
     s = _load_stock(symbol)
     render_insider_transactions(s.insider_transactions)
+
+
+def cmd_valuate(symbol: str) -> None:
+    """Run all valuation models and display the composite verdict."""
+    console.print(f"\nRunning valuation models for [bold cyan]{symbol}[/bold cyan]...\n")
+    from finscope.valuation import valuate
+    v = valuate(symbol)
+
+    console.print(Rule(f"Valuation: {v.symbol}", style="bold magenta"))
+    console.print(f"  Current Price: [bold]${v.current_price:.2f}[/bold]" if v.current_price else "")
+
+    # Verdict
+    verdict_colors = {
+        "Undervalued": "bold green", "Fairly Valued": "yellow",
+        "Overvalued": "bold red", "N/A": "dim",
+    }
+    vc = verdict_colors.get(v.verdict, "white")
+    console.print(f"\n  [bold]Verdict:[/bold]  [{vc}]{v.verdict}[/{vc}]")
+    console.print(f"  [bold]Confidence:[/bold] {v.confidence}")
+    if v.margin_of_safety is not None:
+        ms_color = "green" if v.margin_of_safety > 0 else "red"
+        console.print(f"  [bold]Margin of Safety:[/bold] [{ms_color}]{v.margin_of_safety:+.1f}%[/{ms_color}]")
+    console.print(f"  Signals: [green]{v.signals_bullish} bullish[/green] / "
+                  f"[yellow]{v.signals_neutral} neutral[/yellow] / "
+                  f"[red]{v.signals_bearish} bearish[/red]\n")
+
+    # Graham Number
+    console.print(Rule("Graham Number", style="cyan"))
+    g = v.graham
+    if g.calculable:
+        console.print(f"  EPS: {g.eps:.2f}  |  Book Value: {g.book_value_per_share:.2f}")
+        console.print(f"  Intrinsic Value: [bold]${g.intrinsic:.2f}[/bold]")
+        ms_c = "green" if g.margin_of_safety_pct and g.margin_of_safety_pct > 0 else "red"
+        console.print(f"  Margin of Safety: [{ms_c}]{g.margin_of_safety_pct:+.1f}%[/{ms_c}]  → {g.signal}")
+    else:
+        console.print("  [dim]Cannot compute (negative EPS or book value)[/dim]")
+
+    # DCF
+    console.print(Rule("DCF (Discounted Cash Flow)", style="cyan"))
+    d = v.dcf
+    if d.calculable:
+        console.print(f"  Free Cash Flow: ${d.free_cash_flow/1e9:.2f}B" if d.free_cash_flow else "")
+        console.print(f"  Growth Rate: {d.growth_rate*100:.1f}%" if d.growth_rate else "")
+        console.print(f"  Discount Rate (WACC): {d.discount_rate*100:.1f}%" if d.discount_rate else "")
+        console.print(f"  Intrinsic Value/Share: [bold]${d.intrinsic_per_share:.2f}[/bold]")
+        ms_c = "green" if d.margin_of_safety_pct and d.margin_of_safety_pct > 0 else "red"
+        console.print(f"  Margin of Safety: [{ms_c}]{d.margin_of_safety_pct:+.1f}%[/{ms_c}]  → {d.signal}")
+    else:
+        console.print("  [dim]Cannot compute (missing FCF, growth, or share count)[/dim]")
+
+    # PEG Fair Value
+    console.print(Rule("PEG Fair Value (Peter Lynch)", style="cyan"))
+    p = v.peg
+    if p.calculable:
+        console.print(f"  EPS: {p.eps:.2f}  |  Growth Rate: {p.earnings_growth_rate:.1f}%")
+        console.print(f"  PEG Ratio: {p.peg_ratio:.2f}" if p.peg_ratio else "")
+        console.print(f"  Fair Price: [bold]${p.fair_price:.2f}[/bold]")
+        ms_c = "green" if p.margin_of_safety_pct and p.margin_of_safety_pct > 0 else "red"
+        console.print(f"  Margin of Safety: [{ms_c}]{p.margin_of_safety_pct:+.1f}%[/{ms_c}]  → {p.signal}")
+    else:
+        console.print(f"  PEG Ratio: {p.peg_ratio:.2f}  → {p.signal}" if p.peg_ratio else "  [dim]Insufficient data[/dim]")
+
+    # Relative
+    console.print(Rule("Relative Valuation", style="cyan"))
+    r = v.relative
+    if r.pe_current:
+        console.print(f"  P/E: {r.pe_current:.1f}  |  P/B: {r.pb_current:.1f}" if r.pb_current else f"  P/E: {r.pe_current:.1f}")
+    if r.ev_ebitda_current:
+        console.print(f"  EV/EBITDA: {r.ev_ebitda_current:.1f}")
+    if r.price_vs_50d is not None:
+        c = "green" if r.price_vs_50d < 0 else "red"
+        console.print(f"  vs 50D Avg: [{c}]{r.price_vs_50d:+.1f}%[/{c}]")
+    if r.price_vs_200d is not None:
+        c = "green" if r.price_vs_200d < 0 else "red"
+        console.print(f"  vs 200D Avg: [{c}]{r.price_vs_200d:+.1f}%[/{c}]")
+    if r.price_vs_52w_high is not None:
+        console.print(f"  vs 52W High: {r.price_vs_52w_high:+.1f}%")
+    console.print(f"  Signal: {r.signal}")
+
+    # Piotroski
+    console.print(Rule("Piotroski F-Score", style="cyan"))
+    f = v.piotroski
+    bar = "\u2588" * f.score + "\u2591" * (9 - f.score)
+    score_color = "green" if f.score >= 7 else "yellow" if f.score >= 4 else "red"
+    console.print(f"  Score: [{score_color}]{bar} {f.score}/9 ({f.strength})[/{score_color}]")
+    for criterion, passed in f.details.items():
+        icon = "[green]\u2713[/green]" if passed else "[red]\u2717[/red]"
+        console.print(f"    {icon} {criterion}")
+
+    # Altman Z-Score
+    console.print(Rule("Altman Z-Score", style="cyan"))
+    a = v.altman
+    if a.calculable:
+        zone_colors = {"Safe": "green", "Grey": "yellow", "Distress": "bold red"}
+        zc = zone_colors.get(a.zone, "white")
+        console.print(f"  Z-Score: [{zc}]{a.z_score:.2f} ({a.zone} Zone)[/{zc}]")
+        for comp, val in a.components.items():
+            if val is not None:
+                console.print(f"    {comp}: {val:.4f}")
+    else:
+        console.print("  [dim]Insufficient balance sheet data[/dim]")
+
+    console.print()
 
 
 def cmd_compare(symbols: list[str]) -> None:
@@ -760,6 +864,7 @@ examples:
   finscope AAPL sec-financials      SEC EDGAR XBRL financials
   finscope AAPL sec-filings         Recent SEC filings
   finscope AAPL insiders            Insider transactions
+  finscope AAPL valuate              Valuation analysis (6 models)
   finscope compare AAPL MSFT GOOGL  Side-by-side comparison
   finscope watchlist AAPL TSLA NVDA Compact watchlist
   finscope export AAPL              HTML report
@@ -901,6 +1006,7 @@ def _dispatch(parsed: argparse.Namespace) -> None:
         "sec-financials": lambda: cmd_sec_financials(symbol, parsed.category),
         "sec-filings":    lambda: cmd_sec_filings(symbol),
         "insiders":          lambda: cmd_insiders(symbol),
+        "valuate":           lambda: cmd_valuate(symbol),
         "analyze":           lambda: cmd_analyze(symbol),
         "ask":               lambda: cmd_ask(symbol, " ".join(args[2:]) if len(args) > 2 else ""),
         "summarize-filings": lambda: cmd_summarize_filings(symbol),

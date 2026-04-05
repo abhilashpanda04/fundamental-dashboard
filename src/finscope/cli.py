@@ -658,6 +658,77 @@ class InsiderTransactionsCommand(DashboardCommand):
         render_attribution("SEC EDGAR")
 
 
+class ValuateCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        cmd_valuate(ctx.symbol)
+
+
+class ScreenCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        query = Prompt.ask(
+            "Screener query",
+            default="pe < 20 and roe > 15",
+        )
+        cmd_screen(query)
+
+
+class AIAnalysisCommand(DashboardCommand):
+    """Opens the AI analysis submenu (requires an LLM API key)."""
+
+    def execute(self, ctx: DashboardContext) -> None:
+        from finscope.ai.config import is_ai_available, get_ai_status
+
+        if not is_ai_available():
+            console.print(
+                "\n[red bold]\u2717 AI features require an LLM provider API key.[/red bold]\n"
+                "[dim]Set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, "
+                "GEMINI_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY[/dim]\n"
+            )
+            return
+
+        status = get_ai_status()
+        console.print(f"\n[dim]AI Provider: {status['provider']}[/dim]\n")
+
+        choice = questionary.select(
+            "AI Analysis:",
+            choices=[
+                questionary.Choice("\U0001f9e0  Comprehensive stock analysis",       "analyze"),
+                questionary.Choice("\U0001f4ac  Ask a question about this stock",    "ask"),
+                questionary.Choice("\U0001f4c4  Summarize SEC filings",              "summarize"),
+                questionary.Choice("\U0001f4ca  AI comparison with other stocks",    "compare"),
+                questionary.Separator(),
+                questionary.Choice("\u2190  Back",                                   "back"),
+            ],
+            style=questionary.Style([
+                ("pointer",     "fg:magenta bold"),
+                ("highlighted", "fg:magenta bold"),
+            ]),
+            instruction="(Use arrow keys, Enter to select)",
+        ).ask()
+
+        if not choice or choice == "back":
+            return
+
+        if choice == "analyze":
+            cmd_analyze(ctx.symbol)
+
+        elif choice == "ask":
+            question = Prompt.ask("Your question")
+            if question.strip():
+                cmd_ask(ctx.symbol, question.strip())
+
+        elif choice == "summarize":
+            cmd_summarize_filings(ctx.symbol)
+
+        elif choice == "compare":
+            raw = Prompt.ask(
+                "Additional tickers to compare against (comma-separated)",
+                default="MSFT,GOOGL",
+            )
+            others = [t.strip().upper() for t in raw.split(",") if t.strip()]
+            cmd_ai_compare([ctx.symbol] + others)
+
+
 class CompareStocksCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         input_str = Prompt.ask("Enter tickers (comma-separated, e.g., AAPL,MSFT,GOOGL)")
@@ -765,24 +836,35 @@ def _print_session_header(stock: Stock) -> None:
 def _build_registry() -> CommandRegistry:
     return (
         CommandRegistry()
-        .register(1,  "Company Overview",                     OverviewCommand())
-        .register(2,  "Key Ratios",                           KeyRatiosCommand())
-        .register(3,  "Price History (with sparkline)",       PriceHistoryCommand())
-        .register(4,  "Income Statement (Yahoo)",             IncomeStatementCommand())
-        .register(5,  "Balance Sheet (Yahoo)",                BalanceSheetCommand())
-        .register(6,  "Cash Flow (Yahoo)",                    CashFlowCommand())
-        .register(7,  "News",                                 NewsCommand())
-        .register(8,  "Analyst Recommendations",              AnalystRecsCommand())
-        .register(9,  "Major Holders",                        MajorHoldersCommand())
-        .register(10, "SEC EDGAR: Detailed Financials (XBRL)",SecDetailedFinancialsCommand())
-        .register(11, "SEC EDGAR: Recent Filings",            SecFilingsCommand())
-        .register(12, "SEC EDGAR: Insider Transactions",      InsiderTransactionsCommand())
-        .register(13, "Compare Stocks",                       CompareStocksCommand())
-        .register(14, "Watchlist",                            WatchlistCommand())
-        .register(15, "Export Report to HTML",                ExportHtmlCommand())
-        .register(16, "Mutual Funds",                         MutualFundsCommand())
-        .register(17, "Change Ticker",                        ChangeTickerCommand())
-        .register(0,  "Exit",                                 None)
+        # ── Overview ───────────────────────────────────────────────────────
+        .register(1,  "Company Overview",                      OverviewCommand())
+        .register(2,  "Key Ratios",                            KeyRatiosCommand())
+        .register(3,  "Price History (with sparkline)",        PriceHistoryCommand())
+        # ── Financials ─────────────────────────────────────────────────────
+        .register(4,  "Income Statement",                      IncomeStatementCommand())
+        .register(5,  "Balance Sheet",                         BalanceSheetCommand())
+        .register(6,  "Cash Flow Statement",                   CashFlowCommand())
+        # ── Market data ────────────────────────────────────────────────────
+        .register(7,  "News",                                  NewsCommand())
+        .register(8,  "Analyst Recommendations",               AnalystRecsCommand())
+        .register(9,  "Major Holders",                         MajorHoldersCommand())
+        # ── SEC EDGAR ──────────────────────────────────────────────────────
+        .register(10, "SEC EDGAR: Detailed Financials (XBRL)", SecDetailedFinancialsCommand())
+        .register(11, "SEC EDGAR: Recent Filings",             SecFilingsCommand())
+        .register(12, "SEC EDGAR: Insider Transactions",       InsiderTransactionsCommand())
+        # ── Valuation & Screening ──────────────────────────────────────────
+        .register(13, "Valuation Analysis (6 models)",         ValuateCommand())
+        .register(14, "Stock Screener (S&P 500)",              ScreenCommand())
+        # ── Comparison & Watchlist ─────────────────────────────────────────
+        .register(15, "Compare Stocks",                        CompareStocksCommand())
+        .register(16, "Watchlist",                             WatchlistCommand())
+        # ── AI ─────────────────────────────────────────────────────────────
+        .register(17, "\U0001f9e0  AI Analysis →",              AIAnalysisCommand())
+        # ── Utilities ──────────────────────────────────────────────────────
+        .register(18, "Export Report to HTML",                 ExportHtmlCommand())
+        .register(19, "Mutual Funds",                          MutualFundsCommand())
+        .register(20, "Change Ticker",                         ChangeTickerCommand())
+        .register(0,  "Exit",                                  None)
     )
 
 
@@ -792,31 +874,59 @@ _REGISTRY = _build_registry()
 def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerCommand:
     """Show the interactive menu using questionary (arrow keys + enter)."""
     console.print()
-    
-    choices = []
-    for key, label in _REGISTRY.items():
-        if key == 0:
-            choices.append(questionary.Separator())
-        choices.append(questionary.Choice(title=label, value=key))
-        
+
+    # Build choices with group separators
+    choices: list = [
+        questionary.Separator("─── Overview ───────────────────────────────"),
+        questionary.Choice("Company Overview",             1),
+        questionary.Choice("Key Ratios",                   2),
+        questionary.Choice("Price History (with sparkline)",3),
+        questionary.Separator("─── Financials ─────────────────────────────"),
+        questionary.Choice("Income Statement",             4),
+        questionary.Choice("Balance Sheet",                5),
+        questionary.Choice("Cash Flow Statement",          6),
+        questionary.Separator("─── Market Data ────────────────────────────"),
+        questionary.Choice("News",                         7),
+        questionary.Choice("Analyst Recommendations",      8),
+        questionary.Choice("Major Holders",                9),
+        questionary.Separator("─── SEC EDGAR ──────────────────────────────"),
+        questionary.Choice("Detailed Financials (XBRL)",   10),
+        questionary.Choice("Recent Filings",               11),
+        questionary.Choice("Insider Transactions",         12),
+        questionary.Separator("─── Valuation & Screening ──────────────────"),
+        questionary.Choice("Valuation Analysis (6 models)",13),
+        questionary.Choice("Stock Screener (S&P 500)",     14),
+        questionary.Separator("─── Comparison ─────────────────────────────"),
+        questionary.Choice("Compare Stocks",               15),
+        questionary.Choice("Watchlist",                    16),
+        questionary.Separator("─── AI (requires API key) ──────────────────"),
+        questionary.Choice("\U0001f9e0  AI Analysis \u2192",    17),
+        questionary.Separator("─── Utilities ──────────────────────────────"),
+        questionary.Choice("Export Report to HTML",        18),
+        questionary.Choice("Mutual Funds",                 19),
+        questionary.Choice("Change Ticker",                20),
+        questionary.Separator(),
+        questionary.Choice("Exit",                         0),
+    ]
+
     choice_key = questionary.select(
         "Select an option:",
         choices=choices,
         style=questionary.Style([
-            ('qmark', 'fg:cyan bold'),
-            ('question', 'bold'),
-            ('answer', 'fg:green bold'),
-            ('pointer', 'fg:cyan bold'),
-            ('highlighted', 'fg:cyan bold'),
-            ('selected', 'fg:green'),
-            ('separator', 'fg:darkgray'),
+            ("qmark",       "fg:cyan bold"),
+            ("question",    "bold"),
+            ("answer",      "fg:green bold"),
+            ("pointer",     "fg:cyan bold"),
+            ("highlighted", "fg:cyan bold"),
+            ("selected",    "fg:green"),
+            ("separator",   "fg:dark_orange"),
         ]),
-        instruction="(Use arrow keys to move, Enter to select)"
+        instruction="(Use arrow keys to move, Enter to select)",
     ).ask()
 
     if choice_key is None or choice_key == 0:
         return None
-        
+
     return _REGISTRY.get(choice_key)
 
 

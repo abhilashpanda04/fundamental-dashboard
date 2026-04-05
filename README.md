@@ -11,13 +11,16 @@
 
 Type a ticker symbol and get instant access to:
 
-- **Company Overview** — Name, sector, industry, current price, and business description
-- **Key Financial Ratios** — P/E, PEG, Price/Book, ROE, Debt/Equity, margins, and more
-- **Price History** — OHLCV data for any period (1 day to max), color-coded green/red
-- **Income Statement** — Annual revenue, net income, operating expenses
-- **Balance Sheet** — Assets, liabilities, equity breakdown
-- **Cash Flow** — Operating, investing, and financing cash flows
-- **News** — Latest headlines with links to full articles
+- **Company Overview** — Name, sector, industry, current price, business description, and a 3-month ASCII sparkline chart
+- **Key Financial Ratios** — P/E, PEG, Price/Book, ROE, Debt/Equity, margins, and 20+ other metrics
+- **Price History** — OHLCV data for any period (1 day to max), color-coded green/red, with an inline sparkline chart
+- **Income Statement / Balance Sheet / Cash Flow** — Annual financial statements in a formatted table
+- **Analyst Recommendations** — Buy/Sell/Hold ratings rendered as a color-coded bar chart
+- **Major Holders** — Top institutional holders (Vanguard, BlackRock, etc.) with share counts
+- **Stock Comparison** — Side-by-side ratio comparison of multiple tickers with trend sparklines
+- **Watchlist** — Compact multi-ticker table with price, change, market cap, P/E, and trend
+- **News** — Latest headlines with publisher and links
+- **Export to HTML** — Save the full report as a shareable HTML file
 
 All data is pulled live from Yahoo Finance. No API keys required.
 
@@ -33,29 +36,42 @@ The original version of this project was a Streamlit app that depended on deprec
 
 ## Demo
 
+### Company Overview with Sparkline
 ```text
-────────────────────── Fundamental Dashboard ──────────────────────
-
-Enter a stock ticker (e.g., AAPL, TSLA, MSFT): AAPL
-
-┌──────────────────── Company Overview ────────────────────┐
+╭──────────────────── Company Overview ────────────────────╮
 │ Apple Inc.  (AAPL)                                       │
 │ Technology / Consumer Electronics                        │
 │ Exchange: NMS  |  Currency: USD                          │
-│                                                          │
-│ USD 178.72  +1.34%                                       │
-└──────────────────────────────────────────────────────────┘
+│ USD 255.92  +0.11%                                       │
+╰──────────────────────────────────────────────────────────╯
+  3-Month Trend: ▅▄▃▃▄▃▂▁▁▁▃▃▃▆▇█▇▇▄▄▄▅▆▇▄▅▄▄▃▄▃▂▁▂▂▁▁▃  -4.3%
+```
 
-───────────────────────── Menu ─────────────────────────
-  [1] Company Overview
-  [2] Key Ratios
-  [3] Price History
-  [4] Income Statement
-  [5] Balance Sheet
-  [6] Cash Flow
-  [7] News
-  [8] Change Ticker
-  [0] Exit
+### Analyst Recommendations
+```text
+  Total Analysts: 48
+
+    Strong Buy  ██████ 6 (12%)
+           Buy  ██████████████████████████ 25 (52%)
+          Hold  ███████████████ 15 (31%)
+          Sell  █ 1 (2%)
+   Strong Sell  █ 1 (2%)
+```
+
+### Stock Comparison with Sparklines
+```text
+    AAPL  ▅▄▃▃▄▃▂▁▁▁▃▃▆▇█▇▇▄▄▅▆▇▄▅▄▄▃▄▃▂▁▂▁▁▃  -4.3%
+    MSFT  ▇▇█▇▇▆▆▅▆▇▇▅▄▃▃▃▃▃▂▃▃▃▃▃▃▃▂▂▁▁▁▁▁▁  -21.7%
+   GOOGL  ▅▅▆▆▇▇▆▆▆▆▇▇█▆▆▄▄▃▅▄▄▄▃▃▄▄▃▄▃▂▁▁▂▃   -6.0%
+
+╭────────────────── Side-by-Side Comparison ──────────────────╮
+│ Metric         │         AAPL │         MSFT │        GOOGL │
+├────────────────┼──────────────┼──────────────┼──────────────┤
+│ P/E Ratio      │        32.35 │        23.37 │        27.39 │
+│ Profit Margin  │        27.0% │        39.0% │        32.8% │
+│ ROE            │       152.0% │        34.4% │        35.7% │
+│ ...            │          ... │          ... │          ... │
+╰────────────────┴──────────────┴──────────────┴──────────────╯
 ```
 
 ---
@@ -65,10 +81,10 @@ Enter a stock ticker (e.g., AAPL, TSLA, MSFT): AAPL
 ```text
 fundamental-dashboard/
 ├── src/dashboard/
-│   ├── cli.py          ← Interactive menu and main loop
+│   ├── cli.py          ← Interactive menu loop (13 options)
 │   ├── data.py         ← Yahoo Finance data fetching
-│   └── ui.py           ← Rich rendering (tables, panels, colors)
-├── pyproject.toml      ← Dependencies managed by uv
+│   └── ui.py           ← Rich rendering (sparklines, tables, bars, panels, export)
+├── pyproject.toml
 ├── .gitignore
 └── README.md
 ```
@@ -83,41 +99,52 @@ fundamental-dashboard/
 git clone https://github.com/abhilashpanda04/fundamental-dashboard.git
 cd fundamental-dashboard
 
-# Install with uv
 uv sync
-
-# Activate the environment
 source .venv/bin/activate
 ```
 
 ### Usage
 
 ```bash
-# Interactive mode — prompts for a ticker
+# Interactive mode
 dashboard
 
 # Pass a ticker directly
 dashboard AAPL
-
-# Or run as a module
-python -m dashboard.cli TSLA
 ```
 
-Once inside the dashboard, use the numbered menu to navigate between views. Select `[8]` to switch to a different ticker, or `[0]` to exit.
+### Menu Options
+
+```text
+ [ 1] Company Overview
+ [ 2] Key Ratios
+ [ 3] Price History (with sparkline)
+ [ 4] Income Statement
+ [ 5] Balance Sheet
+ [ 6] Cash Flow
+ [ 7] News
+ [ 8] Analyst Recommendations
+ [ 9] Major Holders
+ [10] Compare Stocks
+ [11] Watchlist
+ [12] Export Report to HTML
+ [13] Change Ticker
+ [ 0] Exit
+```
 
 ---
 
 ## Tech Stack
 
 - **Data Source**: [Yahoo Finance](https://finance.yahoo.com/) via `yfinance` (free, no API key)
-- **Terminal UI**: [Rich](https://github.com/Textualize/rich) (tables, panels, colors, prompts)
+- **Terminal UI**: [Rich](https://github.com/Textualize/rich) (tables, panels, sparklines, bar charts, HTML export)
 - **Package Management**: [uv](https://github.com/astral-sh/uv)
 
 ---
 
 ## Contributing and Feedback
 
-If you have ideas for new views (analyst ratings, insider trades, options chains), feel free to open an issue or PR.
+If you have ideas for new views (options chains, insider trades, earnings calendar), feel free to open an issue or PR.
 
 ## About Me
 

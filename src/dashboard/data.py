@@ -48,6 +48,58 @@ def get_news(ticker: yf.Ticker) -> list[dict]:
     return ticker.news or []
 
 
+def get_analyst_recommendations(ticker: yf.Ticker) -> pd.DataFrame | None:
+    """Get analyst recommendations (buy/sell/hold counts)."""
+    try:
+        recs = ticker.recommendations
+        if recs is not None and not recs.empty:
+            return recs
+    except Exception:
+        pass
+    return None
+
+
+def get_major_holders(ticker: yf.Ticker) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
+    """Get major holders info.
+
+    Returns:
+        Tuple of (holders_breakdown, institutional_holders).
+    """
+    try:
+        breakdown = ticker.major_holders
+    except Exception:
+        breakdown = None
+
+    try:
+        institutional = ticker.institutional_holders
+    except Exception:
+        institutional = None
+
+    return breakdown, institutional
+
+
+def get_sparkline_data(ticker: yf.Ticker, period: str = "3mo") -> list[float]:
+    """Get closing prices for sparkline rendering.
+
+    Args:
+        ticker: yfinance Ticker object.
+        period: Time period for the sparkline.
+
+    Returns:
+        List of closing prices.
+    """
+    df = ticker.history(period=period)
+    if df.empty:
+        return []
+
+    close = df["Close"]
+    # Handle MultiIndex columns
+    if hasattr(close, "columns"):
+        close = close.iloc[:, 0]
+
+    return close.dropna().tolist()
+
+
 def get_key_ratios(info: dict) -> dict:
     """Extract key financial ratios from the info dict."""
     keys = [
@@ -82,3 +134,45 @@ def get_key_ratios(info: dict) -> dict:
         ratios[display_name] = value
 
     return ratios
+
+
+def get_comparison_data(symbols: list[str]) -> list[dict]:
+    """Fetch key metrics for multiple tickers for side-by-side comparison.
+
+    Args:
+        symbols: List of ticker symbols.
+
+    Returns:
+        List of dicts with ticker info and key ratios.
+    """
+    results = []
+
+    for symbol in symbols:
+        ticker = get_ticker(symbol)
+        info = get_company_info(ticker)
+
+        if not info or info.get("quoteType") is None:
+            continue
+
+        results.append({
+            "symbol": symbol.upper(),
+            "name": info.get("shortName", "N/A"),
+            "price": info.get("currentPrice") or info.get("regularMarketPrice"),
+            "change_pct": info.get("regularMarketChangePercent"),
+            "market_cap": info.get("marketCap"),
+            "pe_ratio": info.get("trailingPE"),
+            "forward_pe": info.get("forwardPE"),
+            "peg": info.get("pegRatio"),
+            "pb": info.get("priceToBook"),
+            "ps": info.get("priceToSalesTrailing12Months"),
+            "profit_margin": info.get("profitMargins"),
+            "roe": info.get("returnOnEquity"),
+            "debt_equity": info.get("debtToEquity"),
+            "dividend_yield": info.get("dividendYield"),
+            "beta": info.get("beta"),
+            "revenue": info.get("totalRevenue"),
+            "ebitda": info.get("ebitda"),
+            "sparkline": get_sparkline_data(ticker, "3mo"),
+        })
+
+    return results

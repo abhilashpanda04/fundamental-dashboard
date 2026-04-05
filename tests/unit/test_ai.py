@@ -209,66 +209,106 @@ class TestAgentFunctions:
 
 
 class TestPromptLoader:
-    def test_load_builtin_analyst(self):
+    def setup_method(self):
+        """Clear cache before each test."""
+        from finscope.ai.prompt_loader import load_prompt, load_prompt_raw
+        load_prompt.cache_clear()
+        load_prompt_raw.cache_clear()
+
+    def test_load_base_prompt(self):
+        from finscope.ai.prompt_loader import load_prompt
+        prompt = load_prompt("base")
+        assert "finscope" in prompt.lower()
+        assert "not a licensed financial advisor" in prompt.lower() or "not" in prompt.lower()
+
+    def test_load_analyst_includes_base(self):
         from finscope.ai.prompt_loader import load_prompt
         prompt = load_prompt("analyst")
+        # Should contain base content
+        assert "finscope" in prompt.lower()
+        # Should also contain analyst-specific content
         assert "equity research analyst" in prompt.lower()
-        assert len(prompt) > 50
 
-    def test_load_builtin_qa(self):
+    def test_load_qa_includes_base(self):
         from finscope.ai.prompt_loader import load_prompt
         prompt = load_prompt("qa")
-        assert "financial analyst" in prompt.lower()
+        assert "finscope" in prompt.lower()
+        assert "question" in prompt.lower()
 
-    def test_load_builtin_comparison(self):
+    def test_load_comparison_includes_base(self):
         from finscope.ai.prompt_loader import load_prompt
         prompt = load_prompt("comparison")
+        assert "finscope" in prompt.lower()
         assert "comparative" in prompt.lower() or "comparison" in prompt.lower()
 
-    def test_load_builtin_filing(self):
+    def test_load_filing_includes_base(self):
         from finscope.ai.prompt_loader import load_prompt
         prompt = load_prompt("filing")
+        assert "finscope" in prompt.lower()
         assert "sec" in prompt.lower()
 
-    def test_missing_prompt_raises(self):
+    def test_composed_prompt_has_separator(self):
         from finscope.ai.prompt_loader import load_prompt
-        load_prompt.cache_clear()
+        prompt = load_prompt("analyst")
+        assert "---" in prompt
+
+    def test_raw_does_not_compose(self):
+        from finscope.ai.prompt_loader import load_prompt_raw
+        raw = load_prompt_raw("analyst")
+        # Raw should NOT contain base content
+        assert "not a licensed financial advisor" not in raw.lower()
+        assert "equity research analyst" in raw.lower()
+
+    def test_missing_prompt_raises(self):
+        from finscope.ai.prompt_loader import load_prompt_raw
         with pytest.raises(FileNotFoundError):
-            load_prompt("nonexistent_prompt_xyz")
+            load_prompt_raw("nonexistent_prompt_xyz")
 
     def test_override_dir(self, tmp_path, monkeypatch):
-        from finscope.ai.prompt_loader import load_prompt
+        from finscope.ai.prompt_loader import load_prompt_raw, load_prompt
         load_prompt.cache_clear()
+        load_prompt_raw.cache_clear()
 
-        # Create override prompt
         override = tmp_path / "analyst.md"
         override.write_text("You are a custom analyst.")
         monkeypatch.setenv("FINSCOPE_PROMPTS_DIR", str(tmp_path))
 
-        prompt = load_prompt("analyst")
-        assert prompt == "You are a custom analyst."
+        raw = load_prompt_raw("analyst")
+        assert raw == "You are a custom analyst."
 
-        # Clean up
         load_prompt.cache_clear()
-        monkeypatch.delenv("FINSCOPE_PROMPTS_DIR")
+        load_prompt_raw.cache_clear()
 
-    def test_override_falls_back_to_builtin(self, tmp_path, monkeypatch):
-        from finscope.ai.prompt_loader import load_prompt
+    def test_override_base(self, tmp_path, monkeypatch):
+        from finscope.ai.prompt_loader import load_prompt, load_prompt_raw
         load_prompt.cache_clear()
+        load_prompt_raw.cache_clear()
 
-        # Override dir exists but doesn't have "qa.md"
+        override = tmp_path / "base.md"
+        override.write_text("Custom base rules.")
         monkeypatch.setenv("FINSCOPE_PROMPTS_DIR", str(tmp_path))
 
-        prompt = load_prompt("qa")
-        assert "financial analyst" in prompt.lower()  # Built-in loaded
+        prompt = load_prompt("analyst")
+        assert "Custom base rules" in prompt
 
         load_prompt.cache_clear()
-        monkeypatch.delenv("FINSCOPE_PROMPTS_DIR")
+        load_prompt_raw.cache_clear()
+
+    def test_override_falls_back_to_builtin(self, tmp_path, monkeypatch):
+        from finscope.ai.prompt_loader import load_prompt_raw, load_prompt
+        load_prompt.cache_clear()
+        load_prompt_raw.cache_clear()
+
+        monkeypatch.setenv("FINSCOPE_PROMPTS_DIR", str(tmp_path))
+        raw = load_prompt_raw("qa")
+        assert "question" in raw.lower()
+
+        load_prompt.cache_clear()
+        load_prompt_raw.cache_clear()
 
     def test_prompts_are_stripped(self):
-        from finscope.ai.prompt_loader import load_prompt
-        load_prompt.cache_clear()
-        prompt = load_prompt("analyst")
+        from finscope.ai.prompt_loader import load_prompt_raw
+        prompt = load_prompt_raw("analyst")
         assert not prompt.startswith("\n")
         assert not prompt.endswith("\n")
 

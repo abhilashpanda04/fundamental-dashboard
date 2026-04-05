@@ -1,15 +1,16 @@
 """Prompt loader for AI agents.
 
 Loads system prompts from ``.md`` files in the ``prompts/`` directory.
-Prompts live as plain text files so they can be iterated without touching
-Python code.
+Supports a **base + agent** composition model: the base prompt is
+automatically prepended to every agent-specific prompt.
 
 Override mechanism:
     Set ``FINSCOPE_PROMPTS_DIR`` to a directory containing your own prompt
     files.  Any file found there takes priority over the built-in defaults.
 
     export FINSCOPE_PROMPTS_DIR=~/my-prompts
-    # ~/my-prompts/analyst.md will override the built-in analyst prompt
+    # ~/my-prompts/analyst.md overrides the built-in analyst prompt
+    # ~/my-prompts/base.md overrides the shared base prompt
 """
 
 from __future__ import annotations
@@ -18,21 +19,21 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-__all__ = ["load_prompt"]
+__all__ = ["load_prompt", "load_prompt_raw"]
 
 _BUILTIN_DIR = Path(__file__).parent / "prompts"
 
 
 @lru_cache(maxsize=16)
-def load_prompt(name: str) -> str:
-    """Load a system prompt by name.
+def load_prompt_raw(name: str) -> str:
+    """Load a single prompt file by name (no composition).
 
     Resolution order:
         1. ``$FINSCOPE_PROMPTS_DIR/<name>.md`` (user override)
         2. Built-in ``prompts/<name>.md``
 
     Args:
-        name: Prompt name without extension (e.g. ``"analyst"``, ``"qa"``).
+        name: Prompt name without extension (e.g. ``"analyst"``, ``"base"``).
 
     Returns:
         The prompt text with leading/trailing whitespace stripped.
@@ -59,3 +60,31 @@ def load_prompt(name: str) -> str:
         if override_dir
         else f"Prompt '{name}' not found at {builtin_path}"
     )
+
+
+@lru_cache(maxsize=16)
+def load_prompt(name: str) -> str:
+    """Load a composed system prompt: ``base.md`` + ``<name>.md``.
+
+    The base prompt (shared identity, rules, disclaimers) is automatically
+    prepended to the agent-specific prompt.  If ``name`` is ``"base"``,
+    only the base prompt is returned.
+
+    Args:
+        name: Agent prompt name (e.g. ``"analyst"``, ``"qa"``, ``"comparison"``).
+
+    Returns:
+        The composed prompt string.
+
+    Example::
+
+        prompt = load_prompt("analyst")
+        # Returns: "<base.md content>\\n\\n<analyst.md content>"
+    """
+    if name == "base":
+        return load_prompt_raw("base")
+
+    base = load_prompt_raw("base")
+    agent = load_prompt_raw(name)
+
+    return f"{base}\n\n---\n\n{agent}"

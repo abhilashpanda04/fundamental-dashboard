@@ -115,13 +115,15 @@ class TestParser:
 # ── Dispatch tests ────────────────────────────────────────────────────────────
 
 class TestDispatch:
-    def test_no_args_prints_banner(self):
+    @patch("finscope.cli.Prompt.ask", return_value="exit")
+    def test_no_args_prints_banner(self, mock_ask):
         parser = _build_parser()
         ns = parser.parse_args([])
         with patch("finscope.cli._print_banner") as mock_banner, \
              patch("finscope.cli.console"):
             _dispatch(ns)
         mock_banner.assert_called_once()
+        mock_ask.assert_called_once()
 
     def test_ticker_only_calls_overview(self):
         parser = _build_parser()

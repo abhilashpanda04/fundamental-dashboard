@@ -264,11 +264,13 @@ class TestCliSmoke:
             )
         assert result is False
 
-    def test_dispatch_no_args_does_not_crash(self):
+    @patch("finscope.cli.Prompt.ask", return_value="exit")
+    def test_dispatch_no_args_does_not_crash(self, mock_ask):
         from finscope.cli import _build_parser, _dispatch
         ns = _build_parser().parse_args([])
         with patch("finscope.cli._print_banner"), patch("finscope.cli.console"):
             _dispatch(ns)
+        mock_ask.assert_called_once()
 
     def test_dispatch_ticker_routes_to_overview(self):
         from finscope.cli import _build_parser, _dispatch

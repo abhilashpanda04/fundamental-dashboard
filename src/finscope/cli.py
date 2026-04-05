@@ -28,8 +28,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from rich.console import Console
-from rich.prompt import IntPrompt, Prompt
+from rich.prompt import Prompt
 from rich.rule import Rule
+import questionary
 
 import finscope as fs
 from finscope.exceptions import DataFetchError, FinScopeError, TickerNotFoundError
@@ -751,13 +752,35 @@ def _build_registry() -> CommandRegistry:
 _REGISTRY = _build_registry()
 
 
-def _show_menu() -> None:
+def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerCommand:
+    """Show the interactive menu using questionary (arrow keys + enter)."""
     console.print()
-    console.print(Rule("Menu", style="blue"))
+    
+    choices = []
     for key, label in _REGISTRY.items():
-        style = "red" if key == 0 else "cyan"
-        console.print(f"  [{style}][{key:>2}][/{style}] {label}")
-    console.print()
+        if key == 0:
+            choices.append(questionary.Separator())
+        choices.append(questionary.Choice(title=label, value=key))
+        
+    choice_key = questionary.select(
+        "Select an option:",
+        choices=choices,
+        style=questionary.Style([
+            ('qmark', 'fg:cyan bold'),
+            ('question', 'bold'),
+            ('answer', 'fg:green bold'),
+            ('pointer', 'fg:cyan bold'),
+            ('highlighted', 'fg:cyan bold'),
+            ('selected', 'fg:green'),
+            ('separator', 'fg:darkgray'),
+        ]),
+        instruction="(Use arrow keys to move, Enter to select)"
+    ).ask()
+
+    if choice_key is None or choice_key == 0:
+        return None
+        
+    return _REGISTRY.get(choice_key)
 
 
 # ── Mutual Funds sub-menu ─────────────────────────────────────────────────────
@@ -785,15 +808,21 @@ _REGION_MAP = {
 def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
     while True:
         console.print()
-        console.print(Rule("Mutual Funds", style="bold green"))
+        
+        choices = []
         for key, label in _MF_MENU.items():
-            style = "red" if key == 0 else "cyan"
-            console.print(f"  [{style}][{key}][/{style}] {label}")
-        console.print()
+            if key == 0:
+                choices.append(questionary.Separator())
+            choices.append(questionary.Choice(title=label, value=key))
+            
+        choice = questionary.select(
+            "Select Mutual Funds category:",
+            choices=choices,
+            style=questionary.Style([('pointer', 'fg:green bold'), ('highlighted', 'fg:green bold')]),
+            instruction="(Use arrow keys to move, Enter to select)"
+        ).ask()
 
-        choice = IntPrompt.ask("Select", default=0)
-
-        if choice == 0:
+        if choice is None or choice == 0:
             return
 
         if choice == 1:
@@ -819,22 +848,22 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
             render_global_fund_detail(sym, f.info, f.returns, f.sparkline)
             render_attribution("Yahoo Finance")
 
-        else:
-            console.print("[red]Invalid option.[/red]")
-
 
 def _india_fund_flow(fund_service: FundAnalysisService) -> None:
     while True:
         console.print()
-        console.print(Rule("Indian Mutual Funds  (MFAPI.in — 37,500+ funds)", style="green"))
-        console.print("  [cyan][1][/cyan] Search by name")
-        console.print("  [cyan][2][/cyan] Look up by scheme code")
-        console.print("  [red][0][/red] Back")
-        console.print()
+        sub = questionary.select(
+            "Indian Mutual Funds (MFAPI.in — 37,500+ funds):",
+            choices=[
+                questionary.Choice("Search by name", 1),
+                questionary.Choice("Look up by scheme code", 2),
+                questionary.Separator(),
+                questionary.Choice("Back", 0),
+            ],
+            style=questionary.Style([('pointer', 'fg:cyan bold'), ('highlighted', 'fg:cyan bold')])
+        ).ask()
 
-        sub = IntPrompt.ask("Select", default=0)
-
-        if sub == 0:
+        if sub is None or sub == 0:
             return
 
         if sub == 1:
@@ -909,29 +938,21 @@ def run_interactive(
     ctx = DashboardContext(stock=s, fund_service=_fund_svc)
 
     while True:
-        _show_menu()
-        choice = IntPrompt.ask("Select an option", default=1)
+        command = _show_menu(ctx)
 
-        if choice == 0:
+        if command is None:
             console.print("[dim]Goodbye.[/dim]")
             sys.exit(0)
-
-        command = _REGISTRY.get(choice)
-
-        if command is None and choice != 0:
-            console.print("[red]Invalid option.[/red]")
-            continue
 
         if isinstance(command, ChangeTickerCommand):
             return True
 
-        if command is not None:
-            try:
-                command.execute(ctx)
-            except (TickerNotFoundError, DataFetchError) as exc:
-                console.print(f"[red]{exc}[/red]")
-            except KeyboardInterrupt:
-                console.print("\n[dim]Cancelled.[/dim]")
+        try:
+            command.execute(ctx)
+        except (TickerNotFoundError, DataFetchError) as exc:
+            console.print(f"[red]{exc}[/red]")
+        except KeyboardInterrupt:
+            console.print("\n[dim]Cancelled.[/dim]")
 
 
 # Keep backward compat name
@@ -1024,21 +1045,18 @@ def _dispatch(parsed: argparse.Namespace) -> None:
     interactive: bool = parsed.interactive
 
     # ── No arguments at all → interactive prompt ──────────────────────────
-    if not args and interactive:
+    if not args:
         _print_banner()
         while True:
-            symbol = Prompt.ask("Enter a stock ticker (e.g., AAPL, TSLA, MSFT)")
+            symbol = Prompt.ask("Enter a stock ticker (e.g., AAPL, TSLA, MSFT, or 'exit' to quit)")
+            if symbol.strip().lower() in ('exit', 'quit', 'q'):
+                console.print("[dim]Goodbye.[/dim]")
+                break
             if not symbol.strip():
-                console.print("[red]Please enter a valid ticker.[/red]")
                 continue
             change = run_interactive(symbol.strip().upper())
             if not change:
                 break
-        return
-
-    if not args:
-        _print_banner()
-        console.print("[dim]Run [bold]finscope --help[/bold] for usage, or [bold]finscope -i[/bold] for interactive mode.[/dim]\n")
         return
 
     first = args[0].lower()
@@ -1089,7 +1107,9 @@ def _dispatch(parsed: argparse.Namespace) -> None:
             change = run_interactive(symbol)
             if not change:
                 break
-            symbol = Prompt.ask("Enter a stock ticker").strip().upper()
+            symbol = Prompt.ask("Enter a stock ticker (or 'exit' to quit)").strip().upper()
+            if symbol.lower() in ('exit', 'quit', 'q'):
+                break
         return
 
     # Direct subcommand dispatch

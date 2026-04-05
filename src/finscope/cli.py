@@ -567,6 +567,222 @@ def cmd_risk(symbol: str, period: str = "1y") -> None:
     console.print()
 
 
+# ── Fund risk & analysis renderers ───────────────────────────────────────────
+
+
+def _render_fund_risk(r: "FundRisk") -> None:
+    """Render a FundRisk result to the terminal."""
+    from finscope.fund_analysis.models import FundRisk
+    level_colors = {"Low": "bold green", "Moderate": "yellow",
+                    "High": "bold red", "Very High": "bold red on white"}
+    lc  = level_colors.get(r.risk_level, "white")
+    bar = "█" * int((r.risk_score or 0) / 5) + "░" * (20 - int((r.risk_score or 0) / 5))
+
+    console.print(Rule(f"Fund Risk: {r.name}", style="bold magenta"))
+    console.print(f"  [{lc}]{bar} {r.risk_score:.0f}/100  {r.risk_level} Risk[/{lc}]\n")
+
+    if r.risk_factors:
+        console.print("[bold red]  ⚠ Risk Factors[/bold red]")
+        for f_ in r.risk_factors:
+            console.print(f"    [red]• {f_}[/red]")
+    if r.risk_positives:
+        console.print("\n[bold green]  ✓ Mitigating Factors[/bold green]")
+        for p in r.risk_positives:
+            console.print(f"    [green]• {p}[/green]")
+    console.print()
+
+    # Volatility
+    console.print(Rule("Volatility  [dim](src: price/NAV history)[/dim]", style="cyan"))
+    console.print("  [dim]How much the NAV/price fluctuates. Annual < 15% = low. 15–25% = moderate. > 40% = very high.[/dim]")
+    v = r.volatility
+    if v.annual_vol is not None:
+        vc = "green" if v.annual_vol < 0.20 else "yellow" if v.annual_vol < 0.35 else "red"
+        console.print(f"  Annual Volatility: [{vc}]{v.annual_vol:.1%}[/{vc}]  ({v.interpretation})")
+        if v.vol_30d:  console.print(f"  30D Volatility:    {v.vol_30d:.1%}")
+        if v.vol_90d:  console.print(f"  90D Volatility:    {v.vol_90d:.1%}")
+        if v.skewness is not None:
+            sc = "red" if v.skewness < -0.5 else "green" if v.skewness > 0.5 else "dim"
+            console.print(f"  Skewness:          [{sc}]{v.skewness:.2f}[/{sc}]  [dim]({'left tail risk' if v.skewness < 0 else 'positive skew'})[/dim]")
+        if v.kurtosis is not None:
+            kc = "red" if v.kurtosis > 3 else "dim"
+            console.print(f"  Kurtosis:          [{kc}]{v.kurtosis:.2f}[/{kc}]  [dim]({'fat tails' if v.kurtosis > 3 else 'normal tails'})[/dim]")
+
+    # Downside
+    console.print(Rule("Downside Risk", style="cyan"))
+    console.print("  [dim]VaR 95% = daily loss not exceeded on 95% of days. "
+                  "CVaR = average loss on worst 5% of days. "
+                  "Max drawdown = largest peak-to-trough decline.[/dim]")
+    d = r.downside
+    if d.var_95 is not None:
+        vc = "red" if d.var_95 < -0.03 else "yellow"
+        console.print(f"  VaR 95%:           [{vc}]{d.var_95:.2%}[/{vc}]")
+    if d.var_99 is not None:
+        console.print(f"  VaR 99%:           [red]{d.var_99:.2%}[/red]")
+    if d.cvar_95 is not None:
+        console.print(f"  CVaR 95%:          [red]{d.cvar_95:.2%}[/red]")
+    if d.max_drawdown is not None:
+        mdc = "green" if d.max_drawdown > -0.15 else "yellow" if d.max_drawdown > -0.30 else "red"
+        console.print(f"  Max Drawdown:      [{mdc}]{d.max_drawdown:.1%}[/{mdc}]", end="")
+        if d.drawdown_start and d.drawdown_end:
+            console.print(f"  [dim]({d.drawdown_start} → {d.drawdown_end})[/dim]", end="")
+        console.print()
+        if d.max_drawdown_duration:
+            console.print(f"  Recovery:          {d.max_drawdown_duration} days")
+    if d.current_drawdown is not None:
+        cdc = "green" if d.current_drawdown > -0.10 else "yellow" if d.current_drawdown > -0.25 else "red"
+        console.print(f"  Current Drawdown:  [{cdc}]{d.current_drawdown:.1%}[/{cdc}]  [dim](from 52W high)[/dim]")
+
+    # Risk-adjusted
+    console.print(Rule("Risk-Adjusted Returns  [dim](risk-free rate 4%)[/dim]", style="cyan"))
+    console.print("  [dim]Sharpe > 1.0 = good. Sortino only penalises downside. Calmar = return ÷ drawdown.[/dim]")
+    ra = r.risk_adjusted
+    if ra.annual_return is not None:
+        arc = "green" if ra.annual_return > 0 else "red"
+        console.print(f"  Annual Return:     [{arc}]{ra.annual_return:+.1%}[/{arc}]  [dim](over {r.period} period)[/dim]")
+    if ra.sharpe_ratio is not None:
+        sc = "green" if ra.sharpe_ratio > 1 else "yellow" if ra.sharpe_ratio > 0 else "red"
+        console.print(f"  Sharpe Ratio:      [{sc}]{ra.sharpe_ratio:.2f}[/{sc}]  [dim]({ra.interpretation})[/dim]")
+    if ra.sortino_ratio is not None:
+        sc = "green" if ra.sortino_ratio > 1 else "yellow" if ra.sortino_ratio > 0 else "red"
+        console.print(f"  Sortino Ratio:     [{sc}]{ra.sortino_ratio:.2f}[/{sc}]")
+    if ra.calmar_ratio is not None:
+        cc = "green" if ra.calmar_ratio > 1 else "yellow" if ra.calmar_ratio > 0 else "red"
+        console.print(f"  Calmar Ratio:      [{cc}]{ra.calmar_ratio:.2f}[/{cc}]")
+
+    # Beta (global ETFs only)
+    if r.beta is not None or r.correlation_vs_market is not None:
+        console.print(Rule("Market Sensitivity  [dim](vs SPY)[/dim]", style="cyan"))
+        console.print("  [dim]Beta < 0.8 = defensive. Beta > 1.2 = amplifies market moves.[/dim]")
+        if r.beta is not None:
+            bc = "green" if r.beta < 0.8 else "yellow" if r.beta < 1.3 else "red"
+            console.print(f"  Beta:              [{bc}]{r.beta:.2f}[/{bc}]")
+        if r.correlation_vs_market is not None:
+            console.print(f"  Correlation (SPY): {r.correlation_vs_market:.2f}")
+        if r.r_squared is not None:
+            console.print(f"  R-Squared (SPY):   {r.r_squared:.1%}")
+
+
+def _render_fund_analysis(a: "FundAnalysis") -> None:
+    """Render a FundAnalysis result to the terminal."""
+    rating_colors = {"Strong": "bold green", "Good": "green",
+                     "Average": "yellow", "Below Average": "red", "Weak": "bold red"}
+    rc = rating_colors.get(a.overall_rating, "white")
+
+    console.print(Rule(f"Fund Analysis: {a.name}", style="bold magenta"))
+    console.print(f"  Overall Rating: [{rc}]{a.overall_rating}[/{rc}]")
+    console.print(f"  Category:       {a.category}")
+    console.print(f"  Fund House:     {a.fund_house}\n")
+
+    if a.highlights:
+        console.print("[bold green]  ✓ Highlights[/bold green]")
+        for h in a.highlights:
+            console.print(f"    [green]• {h}[/green]")
+    if a.concerns:
+        console.print("[bold red]  ⚠ Concerns[/bold red]")
+        for c in a.concerns:
+            console.print(f"    [red]• {c}[/red]")
+    console.print()
+
+    # Cost
+    console.print(Rule("Cost Efficiency  [dim](expense ratio)[/dim]", style="cyan"))
+    console.print("  [dim]Expense ratio = annual fee as % of AUM. ETFs < 0.10% = excellent. "
+                  "Active funds < 0.50% = good. Higher fees directly reduce your returns.[/dim]")
+    if a.expense_ratio is not None:
+        er_color = "green" if a.expense_rating in ("Excellent", "Good") else "yellow" if a.expense_rating == "Average" else "red"
+        console.print(f"  Expense Ratio: [{er_color}]{a.expense_ratio:.3%}[/{er_color}]  ({a.expense_rating})")
+    else:
+        console.print("  [dim]Expense ratio not available[/dim]")
+    if a.aum is not None:
+        console.print(f"  AUM:           ${a.aum/1e9:.2f}B  ({a.aum_rating})" if a.aum >= 1e9
+                      else f"  AUM:           ${a.aum/1e6:.0f}M  ({a.aum_rating})")
+
+    # Rolling returns
+    console.print(Rule("Rolling Returns (CAGR)  [dim](src: price/NAV history)[/dim]", style="cyan"))
+    console.print("  [dim]CAGR = Compound Annual Growth Rate. Shows what ₹100 invested would be worth "
+                  "annualised over each period. Compare against category/benchmark.[/dim]")
+    from finscope.ui.builders import TableBuilder
+    builder = (
+        TableBuilder("")
+        .border("green")
+        .column("Period", style="bold", min_width=8)
+    )
+    labels = [k for k in ["1M", "3M", "6M", "1Y", "3Y", "5Y"] if k in a.rolling_returns]
+    for label in labels:
+        builder.column(label, justify="right", min_width=10)
+    row = []
+    for label in labels:
+        val = a.rolling_returns.get(label)
+        if val is None:
+            row.append("[dim]N/A[/dim]")
+        else:
+            color = "green" if val > 0 else "red"
+            row.append(f"[{color}]{val:+.1%}[/{color}]")
+    if row:
+        builder.row("Return", *row)
+        console.print(builder.build())
+
+    # Consistency
+    if a.consistency_score is not None:
+        console.print(Rule("Consistency", style="cyan"))
+        console.print("  [dim]% of rolling 12-month windows with a positive return. "
+                      "> 80% = very consistent. < 50% = unreliable.[/dim]")
+        cc = "green" if a.consistency_score > 0.80 else "yellow" if a.consistency_score > 0.60 else "red"
+        console.print(f"  Rolling 1Y Consistency: [{cc}]{a.consistency_score:.0%}[/{cc}] of windows positive")
+
+
+def cmd_global_fund_risk(symbol: str, period: str = "1y") -> None:
+    """Risk profile for a global ETF or mutual fund."""
+    console.print(f"\nComputing risk for [bold cyan]{symbol}[/bold cyan] ({period})...\n")
+    from finscope.fund_analysis import analyze_global_fund
+    import finscope
+    fund = finscope.fund(symbol)
+    r, _ = analyze_global_fund(symbol, fund=fund, period=period)
+    _render_fund_risk(r)
+    render_attribution(f"Yahoo Finance · price history ({period})")
+
+
+def cmd_global_fund_analyze(symbol: str) -> None:
+    """Fund-specific analysis for a global ETF or mutual fund."""
+    console.print(f"\nAnalysing fund [bold cyan]{symbol}[/bold cyan]...\n")
+    from finscope.fund_analysis import analyze_global_fund
+    import finscope
+    fund = finscope.fund(symbol)
+    _, a = analyze_global_fund(symbol, fund=fund)
+    _render_fund_analysis(a)
+    render_attribution("Yahoo Finance")
+
+
+def cmd_india_fund_risk_and_analysis(fund_service: "FundAnalysisService",
+                                      scheme_code: str) -> None:
+    """Risk + analysis for an Indian mutual fund (MFAPI)."""
+    console.print(f"\nLoading scheme {scheme_code}...\n")
+    detail = fund_service.get_india_fund_detail(scheme_code)
+    if not detail:
+        console.print(f"[red]Could not fetch fund {scheme_code}.[/red]")
+        return
+    meta     = detail.get("meta", {})
+    nav_data = detail.get("data", [])
+
+    from finscope.fund_analysis import analyze_india_fund
+    r, a = analyze_india_fund(nav_data, meta)
+    _render_fund_risk(r)
+    console.print()
+    _render_fund_analysis(a)
+    render_attribution("MFAPI.in")
+    # Offer deeper analysis
+    deeper = questionary.select(
+        "Deep dive:",
+        choices=[
+            questionary.Choice("Risk Profile (volatility, VaR, drawdown, Sharpe)", "risk"),
+            questionary.Choice("Fund Analysis (rolling returns, consistency)", "analyze"),
+            questionary.Choice("Skip", "skip"),
+        ],
+        style=questionary.Style([("pointer", "fg:cyan bold"), ("highlighted", "fg:cyan bold")]),
+    ).ask()
+    if deeper in ("risk", "analyze"):
+        cmd_india_fund_risk_and_analysis(fund_service, scheme_code)
+
+
 def cmd_analyze(symbol: str) -> None:
     """AI-powered comprehensive stock analysis."""
     _require_ai()
@@ -1183,6 +1399,20 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
                 continue
             render_global_fund_detail(sym, f.info, f.returns, f.sparkline)
             render_attribution("Yahoo Finance")
+            # Offer deeper analysis
+            deeper = questionary.select(
+                "Deep dive:",
+                choices=[
+                    questionary.Choice("Risk Profile (volatility, VaR, drawdown, Sharpe)", "risk"),
+                    questionary.Choice("Fund Analysis (expense, rolling returns, consistency)", "analyze"),
+                    questionary.Choice("Skip", "skip"),
+                ],
+                style=questionary.Style([("pointer", "fg:cyan bold"), ("highlighted", "fg:cyan bold")]),
+            ).ask()
+            if deeper == "risk":
+                cmd_global_fund_risk(sym)
+            elif deeper == "analyze":
+                cmd_global_fund_analyze(sym)
 
 
 def _india_fund_flow(fund_service: FundAnalysisService) -> None:

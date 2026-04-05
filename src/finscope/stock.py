@@ -361,6 +361,22 @@ class Fund:
         """1-year closing-price series for trend charts."""
         return self._service.get_global_fund_sparkline(self._symbol, period="1y")
 
+    def risk(self, period: str = "1y") -> "FundRisk":
+        """Compute a risk profile from NAV/price history.
+
+        Covers volatility, VaR/CVaR, max drawdown, Sharpe/Sortino/Calmar,
+        and beta vs SPY (for global ETFs).
+        """
+        from finscope.fund_analysis import analyze_global_fund
+        risk_result, _ = analyze_global_fund(self._symbol, fund=self, period=period)
+        return risk_result
+
+    def analyze(self) -> "FundAnalysis":
+        """Fund-specific analysis: expense ratio, rolling returns, return consistency."""
+        from finscope.fund_analysis import analyze_global_fund
+        _, analysis = analyze_global_fund(self._symbol, fund=self)
+        return analysis
+
     # ── Dunder helpers ────────────────────────────────────────────────────────
 
     def __repr__(self) -> str:

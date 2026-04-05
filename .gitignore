@@ -6,3 +6,10 @@ venv/
 *.log
 hello.py
 output/
+
+# Test / coverage artefacts
+.coverage
+htmlcov/
+.pytest_cache/
+*.pyc
+

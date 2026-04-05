@@ -1,102 +1,328 @@
-"""CLI entry point for the Fundamental Dashboard."""
+"""CLI entry point — Command Pattern.
 
-import argparse
+Each menu option is a discrete ``DashboardCommand`` object with a single
+``execute(ctx)`` method.  A ``CommandRegistry`` maps integer keys to command
+instances.  The main loop just dispatches to the registry — it never
+contains business logic itself.
+
+This eliminates the giant if/elif chain and makes each feature independently
+testable and extendable without modifying existing code (Open/Closed
+Principle).
+"""
+
+from __future__ import annotations
+
 import sys
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 
 from rich.console import Console
-from rich.prompt import Prompt, IntPrompt
+from rich.prompt import IntPrompt, Prompt
 from rich.rule import Rule
 
-from dashboard.data import (
-    get_ticker,
-    get_company_info,
-    get_key_ratios,
-    get_price_history,
-    get_financials,
-    get_balance_sheet,
-    get_cashflow,
-    get_news,
-    get_sparkline_data,
-    get_analyst_recommendations,
-    get_major_holders,
-    get_comparison_data,
-)
-from dashboard.sec_edgar import (
-    get_detailed_financials,
-    get_recent_filings,
-    get_insider_transactions,
-)
-from dashboard.mutual_funds import (
-    search_india_funds,
-    get_india_fund_detail,
-    calculate_india_fund_returns,
-    get_india_fund_nav_series,
-    get_global_fund_info,
-    get_global_fund_returns,
-    get_global_fund_sparkline,
-    get_popular_funds_snapshot,
-    POPULAR_FUNDS,
-)
+from dashboard.exceptions import DataFetchError, TickerNotFoundError
+from dashboard.services import FundAnalysisService, StockAnalysisService
 from dashboard.ui import (
-    render_header,
-    render_description,
-    render_ratios,
-    render_price_history,
-    render_financials,
-    render_news,
-    render_analyst_recommendations,
-    render_major_holders,
-    render_comparison,
-    render_watchlist,
     export_to_html,
+    make_sparkline,
+    render_analyst_recommendations,
+    render_comparison,
+    render_description,
     render_detailed_financials,
-    render_sec_filings,
-    render_insider_transactions,
-    render_india_fund_overview,
+    render_financials,
     render_fund_returns,
-    render_india_fund_search_results,
-    render_global_fund_snapshot,
     render_global_fund_detail,
-    _make_sparkline,
+    render_global_fund_snapshot,
+    render_header,
+    render_india_fund_overview,
+    render_india_fund_search_results,
+    render_insider_transactions,
+    render_major_holders,
+    render_news,
+    render_price_history,
+    render_ratios,
+    render_sec_filings,
+    render_watchlist,
 )
 
 console = Console()
 
-MENU = {
-    1: "Company Overview",
-    2: "Key Ratios",
-    3: "Price History (with sparkline)",
-    4: "Income Statement (Yahoo)",
-    5: "Balance Sheet (Yahoo)",
-    6: "Cash Flow (Yahoo)",
-    7: "News",
-    8: "Analyst Recommendations",
-    9: "Major Holders",
-    10: "SEC EDGAR: Detailed Financials (XBRL)",
-    11: "SEC EDGAR: Recent Filings",
-    12: "SEC EDGAR: Insider Transactions",
-    13: "Compare Stocks",
-    14: "Watchlist",
-    15: "Export Report to HTML",
-    16: "Mutual Funds",
-    17: "Change Ticker",
-    0: "Exit",
-}
+
+# ── Context ────────────────────────────────────────────────────────────────────
 
 
-def show_menu():
-    """Display the interactive menu."""
+@dataclass
+class DashboardContext:
+    """Shared mutable state passed to every command during a dashboard session."""
+
+    symbol: str
+    info: dict
+    sparkline: list[float]
+    stock_service: StockAnalysisService
+    fund_service: FundAnalysisService
+
+
+# ── Command base class ────────────────────────────────────────────────────────
+
+
+class DashboardCommand(ABC):
+    """Abstract base for dashboard menu commands (Command Pattern).
+
+    Each subclass encapsulates one menu action.  Commands declare what they
+    need through the ``DashboardContext`` passed to ``execute``.
+    """
+
+    @abstractmethod
+    def execute(self, ctx: DashboardContext) -> None:
+        """Run this command using data from *ctx*."""
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<{self.__class__.__name__}>"
+
+
+# ── Concrete commands ─────────────────────────────────────────────────────────
+
+
+class OverviewCommand(DashboardCommand):
+    """Show company overview panel and description."""
+
+    def execute(self, ctx: DashboardContext) -> None:
+        render_header(ctx.info, ctx.sparkline)
+        render_description(ctx.info)
+
+
+class KeyRatiosCommand(DashboardCommand):
+    """Show key financial ratios."""
+
+    def execute(self, ctx: DashboardContext) -> None:
+        ratios = ctx.stock_service.get_key_ratios(ctx.info).to_display_dict()
+        render_ratios(ratios)
+
+
+class PriceHistoryCommand(DashboardCommand):
+    """Show price history with sparkline for a user-chosen period."""
+
+    def execute(self, ctx: DashboardContext) -> None:
+        period = Prompt.ask(
+            "Period",
+            choices=["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"],
+            default="1mo",
+        )
+        df = ctx.stock_service.get_price_history(ctx.symbol, period=period)
+        sparkline = ctx.stock_service.get_sparkline(ctx.symbol, period=period)
+        render_price_history(df, period, sparkline)
+
+
+class IncomeStatementCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        df = ctx.stock_service.get_financials(ctx.symbol)
+        render_financials(df, "Income Statement")
+
+
+class BalanceSheetCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        df = ctx.stock_service.get_balance_sheet(ctx.symbol)
+        render_financials(df, "Balance Sheet")
+
+
+class CashFlowCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        df = ctx.stock_service.get_cashflow(ctx.symbol)
+        render_financials(df, "Cash Flow Statement")
+
+
+class NewsCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        news = ctx.stock_service.get_news(ctx.symbol)
+        render_news(news)
+
+
+class AnalystRecsCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        recs = ctx.stock_service.get_analyst_recommendations(ctx.symbol)
+        render_analyst_recommendations(recs)
+
+
+class MajorHoldersCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        breakdown, institutional = ctx.stock_service.get_major_holders(ctx.symbol)
+        render_major_holders(breakdown, institutional)
+
+
+class SecDetailedFinancialsCommand(DashboardCommand):
+    _CAT_MAP = {
+        "income": "Income Statement",
+        "comprehensive": "Comprehensive Income",
+        "assets": "Balance Sheet (Assets)",
+        "liabilities": "Balance Sheet (Liabilities & Equity)",
+        "cashflow": "Cash Flow",
+        "pershare": "Per Share & Shares",
+        "debt": "Debt Maturity Schedule",
+    }
+
+    def execute(self, ctx: DashboardContext) -> None:
+        console.print("Loading detailed financials from SEC EDGAR...")
+        edgar_data = ctx.stock_service.get_detailed_financials(ctx.symbol)
+        if not edgar_data:
+            console.print("[red]No SEC EDGAR data found for this ticker.[/red]")
+            return
+        sub = Prompt.ask(
+            "Category",
+            choices=list(self._CAT_MAP),
+            default="income",
+        )
+        render_detailed_financials(edgar_data, self._CAT_MAP[sub])
+
+
+class SecFilingsCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        console.print("Loading recent SEC filings...")
+        filings = ctx.stock_service.get_recent_filings(ctx.symbol, count=20)
+        render_sec_filings(filings)
+
+
+class InsiderTransactionsCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        console.print("Loading insider transactions...")
+        txns = ctx.stock_service.get_insider_transactions(ctx.symbol)
+        render_insider_transactions(txns)
+
+
+class CompareStocksCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        input_str = Prompt.ask(
+            "Enter tickers to compare (comma-separated, e.g., AAPL,MSFT,GOOGL)"
+        )
+        symbols = [s.strip().upper() for s in input_str.split(",") if s.strip()]
+        if ctx.symbol.upper() not in symbols:
+            symbols.insert(0, ctx.symbol.upper())
+        if len(symbols) < 2:
+            console.print("[red]Please enter at least 2 tickers.[/red]")
+            return
+        console.print(f"Loading comparison data for {', '.join(symbols)}...")
+        comp_data = ctx.stock_service.get_comparison_data(symbols)
+        # Pass as dicts for the renderer (backward-compat with dict-based render_comparison)
+        render_comparison([vars(d) for d in comp_data])
+
+
+class WatchlistCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        input_str = Prompt.ask(
+            "Enter watchlist tickers (comma-separated, e.g., AAPL,TSLA,NVDA)"
+        )
+        symbols = [s.strip().upper() for s in input_str.split(",") if s.strip()]
+        if not symbols:
+            console.print("[red]Please enter at least 1 ticker.[/red]")
+            return
+        console.print(f"Loading watchlist for {', '.join(symbols)}...")
+        watch_data = ctx.stock_service.get_comparison_data(symbols)
+        render_watchlist([vars(d) for d in watch_data])
+
+
+class ExportHtmlCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        filename = Prompt.ask(
+            "Output filename", default=f"{ctx.symbol.lower()}_report.html"
+        )
+        export_data = ctx.stock_service.build_export_data(ctx.symbol)
+        export_to_html(
+            export_data["info"],
+            export_data["ratios"],
+            export_data["price_history"],
+            output_path=filename,
+        )
+
+
+class MutualFundsCommand(DashboardCommand):
+    """Launches the mutual funds sub-menu."""
+
+    def execute(self, ctx: DashboardContext) -> None:
+        _run_mutual_funds_menu(ctx.fund_service)
+
+
+class ChangeTickerCommand(DashboardCommand):
+    """Signals the main loop to ask for a new ticker symbol.
+
+    The main loop checks ``isinstance(command, ChangeTickerCommand)`` and
+    returns ``True`` to trigger a ticker change instead of calling ``execute``.
+    This ``execute`` implementation is a no-op safety fallback.
+    """
+
+    def execute(self, ctx: DashboardContext) -> None:  # pragma: no cover
+        pass  # Handled as a sentinel in the main loop; never called directly.
+
+
+# ── Command Registry ──────────────────────────────────────────────────────────
+
+
+class CommandRegistry:
+    """Maps integer menu keys to (label, DashboardCommand) pairs.
+
+    Using a registry avoids any ``if/elif`` chains and makes it trivial to
+    add new menu options without modifying existing code.
+    """
+
+    def __init__(self) -> None:
+        self._commands: dict[int, tuple[str, DashboardCommand | None]] = {}
+
+    def register(
+        self, key: int, label: str, command: DashboardCommand | None = None
+    ) -> "CommandRegistry":
+        self._commands[key] = (label, command)
+        return self
+
+    def get(self, key: int) -> DashboardCommand | None:
+        entry = self._commands.get(key)
+        return entry[1] if entry else None
+
+    def label(self, key: int) -> str:
+        entry = self._commands.get(key)
+        return entry[0] if entry else ""
+
+    def items(self) -> list[tuple[int, str]]:
+        return [(k, label) for k, (label, _) in self._commands.items()]
+
+
+def _build_registry() -> CommandRegistry:
+    """Construct and return the main dashboard command registry."""
+    return (
+        CommandRegistry()
+        .register(1,  "Company Overview",                     OverviewCommand())
+        .register(2,  "Key Ratios",                           KeyRatiosCommand())
+        .register(3,  "Price History (with sparkline)",       PriceHistoryCommand())
+        .register(4,  "Income Statement (Yahoo)",             IncomeStatementCommand())
+        .register(5,  "Balance Sheet (Yahoo)",                BalanceSheetCommand())
+        .register(6,  "Cash Flow (Yahoo)",                    CashFlowCommand())
+        .register(7,  "News",                                 NewsCommand())
+        .register(8,  "Analyst Recommendations",              AnalystRecsCommand())
+        .register(9,  "Major Holders",                        MajorHoldersCommand())
+        .register(10, "SEC EDGAR: Detailed Financials (XBRL)",SecDetailedFinancialsCommand())
+        .register(11, "SEC EDGAR: Recent Filings",            SecFilingsCommand())
+        .register(12, "SEC EDGAR: Insider Transactions",      InsiderTransactionsCommand())
+        .register(13, "Compare Stocks",                       CompareStocksCommand())
+        .register(14, "Watchlist",                            WatchlistCommand())
+        .register(15, "Export Report to HTML",                ExportHtmlCommand())
+        .register(16, "Mutual Funds",                         MutualFundsCommand())
+        .register(17, "Change Ticker",                        ChangeTickerCommand())
+        .register(0,  "Exit",                                 None)
+    )
+
+
+_REGISTRY = _build_registry()
+
+
+def _show_menu() -> None:
     console.print()
     console.print(Rule("Menu", style="blue"))
-    for key, label in MENU.items():
-        if key == 0:
-            console.print(f"  [red][{key:>2}][/red] {label}")
-        else:
-            console.print(f"  [cyan][{key:>2}][/cyan] {label}")
+    for key, label in _REGISTRY.items():
+        style = "red" if key == 0 else "cyan"
+        console.print(f"  [{style}][{key:>2}][/{style}] {label}")
     console.print()
 
 
-MF_MENU = {
+# ── Mutual Funds sub-menu ─────────────────────────────────────────────────────
+
+_MF_MENU = {
     1: "India — Search & Explore (MFAPI.in)",
     2: "US Mutual Funds Snapshot",
     3: "Global ETF Snapshot (LSE)",
@@ -107,13 +333,20 @@ MF_MENU = {
     0: "Back",
 }
 
+_REGION_MAP = {
+    2: "US",
+    3: "Global ETF (LSE)",
+    4: "Asia Pacific ETF",
+    5: "European ETF",
+    6: "Fixed Income / Bond ETF",
+}
 
-def run_mutual_funds_menu():
-    """Mutual funds sub-menu."""
+
+def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
     while True:
         console.print()
         console.print(Rule("Mutual Funds", style="bold green"))
-        for key, label in MF_MENU.items():
+        for key, label in _MF_MENU.items():
             style = "red" if key == 0 else "cyan"
             console.print(f"  [{style}][{key}][/{style}] {label}")
         console.print()
@@ -123,20 +356,13 @@ def run_mutual_funds_menu():
         if choice == 0:
             return
 
-        elif choice == 1:
-            _india_fund_flow()
+        if choice == 1:
+            _india_fund_flow(fund_service)
 
-        elif choice in (2, 3, 4, 5, 6):
-            region_map = {
-                2: "US",
-                3: "Global ETF (LSE)",
-                4: "Asia Pacific ETF",
-                5: "European ETF",
-                6: "Fixed Income / Bond ETF",
-            }
-            region = region_map[choice]
+        elif choice in _REGION_MAP:
+            region = _REGION_MAP[choice]
             console.print(f"\nLoading {region} funds...")
-            data = get_popular_funds_snapshot(region)
+            data = fund_service.get_popular_funds_snapshot(region)
             render_global_fund_snapshot(data, region)
 
         elif choice == 7:
@@ -145,20 +371,19 @@ def run_mutual_funds_menu():
                 continue
             sym = sym.strip().upper()
             console.print(f"Loading data for {sym}...")
-            fund_info = get_global_fund_info(sym)
+            fund_info = fund_service.get_global_fund_info(sym)
             if not fund_info:
                 console.print(f"[red]Could not find fund: {sym}[/red]")
                 continue
-            returns = get_global_fund_returns(sym)
-            spark = get_global_fund_sparkline(sym, "1y")
+            returns = fund_service.get_global_fund_returns(sym)
+            spark = fund_service.get_global_fund_sparkline(sym, "1y")
             render_global_fund_detail(sym, fund_info, returns, spark)
 
         else:
             console.print("[red]Invalid option.[/red]")
 
 
-def _india_fund_flow():
-    """Interactive flow for searching and exploring Indian mutual funds."""
+def _india_fund_flow(fund_service: FundAnalysisService) -> None:
     while True:
         console.print()
         console.print(Rule("Indian Mutual Funds  (MFAPI.in — 37,500+ funds)", style="green"))
@@ -172,29 +397,26 @@ def _india_fund_flow():
         if sub == 0:
             return
 
-        elif sub == 1:
-            query = Prompt.ask("Search (e.g., SBI Small Cap, Parag Parikh, HDFC Mid)")
+        if sub == 1:
+            query = Prompt.ask("Search (e.g., SBI Small Cap, Parag Parikh)")
             if not query.strip():
                 continue
-            results = search_india_funds(query.strip())
+            results = fund_service.search_india_funds(query.strip())
             render_india_fund_search_results(results)
-            if not results:
-                continue
-
-            code = Prompt.ask("Enter scheme code to view details (or press Enter to skip)", default="")
-            if code.strip():
-                _show_india_fund(code.strip())
+            if results:
+                code = Prompt.ask("Enter scheme code to view details (or press Enter to skip)", default="")
+                if code.strip():
+                    _show_india_fund(fund_service, code.strip())
 
         elif sub == 2:
             code = Prompt.ask("Enter scheme code (e.g., 125497)")
             if code.strip():
-                _show_india_fund(code.strip())
+                _show_india_fund(fund_service, code.strip())
 
 
-def _show_india_fund(scheme_code: str):
-    """Fetch and display details for an Indian mutual fund."""
+def _show_india_fund(fund_service: FundAnalysisService, scheme_code: str) -> None:
     console.print(f"\nLoading scheme {scheme_code}...")
-    detail = get_india_fund_detail(scheme_code)
+    detail = fund_service.get_india_fund_detail(scheme_code)
 
     if not detail:
         console.print(f"[red]Could not fetch fund {scheme_code}.[/red]")
@@ -205,159 +427,84 @@ def _show_india_fund(scheme_code: str):
 
     render_india_fund_overview(meta, {}, nav_data)
 
-    # Calculate returns
-    returns = calculate_india_fund_returns(nav_data)
+    returns = fund_service.calculate_india_fund_returns(nav_data)
     render_fund_returns(returns, title="Point-to-Point Returns")
 
-    # Sparkline
-    spark_vals = get_india_fund_nav_series(nav_data, days=365)
+    spark_vals = fund_service.get_india_fund_nav_series(nav_data, days=365)
     if spark_vals:
-        console.print(f"  1Y NAV Trend: {_make_sparkline(spark_vals, width=60)}")
+        console.print(f"  1Y NAV Trend: {make_sparkline(spark_vals, width=60)}")
 
 
-def run_dashboard(symbol: str):
-    """Main dashboard loop for a given ticker symbol."""
+# ── Main dashboard loop ───────────────────────────────────────────────────────
+
+
+def run_dashboard(
+    symbol: str,
+    stock_service: StockAnalysisService | None = None,
+    fund_service: FundAnalysisService | None = None,
+) -> bool:
+    """Run the interactive dashboard for *symbol*.
+
+    Returns:
+        ``True`` when the user selects "Change Ticker", ``False`` on exit.
+    """
+    _stock_svc = stock_service or StockAnalysisService()
+    _fund_svc = fund_service or FundAnalysisService()
+
     console.print(f"\nLoading data for [bold cyan]{symbol.upper()}[/bold cyan]...\n")
 
-    ticker = get_ticker(symbol)
-    info = get_company_info(ticker)
-
-    if not info or info.get("quoteType") is None:
+    try:
+        info = _stock_svc.get_info(symbol)
+    except TickerNotFoundError:
         console.print(f"[red]Could not find ticker: {symbol}[/red]")
         return False
+    except DataFetchError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return False
 
-    sparkline_data = get_sparkline_data(ticker, "3mo")
-    render_header(info, sparkline_data)
+    sparkline = _stock_svc.get_sparkline(symbol, period="3mo")
+    render_header(info, sparkline)
+
+    ctx = DashboardContext(
+        symbol=symbol.upper(),
+        info=info,
+        sparkline=sparkline,
+        stock_service=_stock_svc,
+        fund_service=_fund_svc,
+    )
 
     while True:
-        show_menu()
+        _show_menu()
         choice = IntPrompt.ask("Select an option", default=1)
 
         if choice == 0:
             console.print("[dim]Goodbye.[/dim]")
             sys.exit(0)
 
-        elif choice == 1:
-            render_header(info, sparkline_data)
-            render_description(info)
+        command = _REGISTRY.get(choice)
 
-        elif choice == 2:
-            ratios = get_key_ratios(info)
-            render_ratios(ratios)
+        if command is None and choice != 0:
+            console.print("[red]Invalid option.[/red]")
+            continue
 
-        elif choice == 3:
-            period = Prompt.ask(
-                "Period",
-                choices=["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"],
-                default="1mo",
-            )
-            df = get_price_history(ticker, period=period)
-            period_sparkline = get_sparkline_data(ticker, period)
-            render_price_history(df, period, period_sparkline)
-
-        elif choice == 4:
-            df = get_financials(ticker)
-            render_financials(df, "Income Statement")
-
-        elif choice == 5:
-            df = get_balance_sheet(ticker)
-            render_financials(df, "Balance Sheet")
-
-        elif choice == 6:
-            df = get_cashflow(ticker)
-            render_financials(df, "Cash Flow Statement")
-
-        elif choice == 7:
-            news = get_news(ticker)
-            render_news(news)
-
-        elif choice == 8:
-            recs = get_analyst_recommendations(ticker)
-            render_analyst_recommendations(recs)
-
-        elif choice == 9:
-            breakdown, institutional = get_major_holders(ticker)
-            render_major_holders(breakdown, institutional)
-
-        elif choice == 10:
-            console.print("Loading detailed financials from SEC EDGAR...")
-            edgar_data = get_detailed_financials(symbol)
-            if not edgar_data:
-                console.print("[red]No SEC EDGAR data found for this ticker.[/red]")
-                continue
-            sub = Prompt.ask(
-                "Category",
-                choices=["income", "comprehensive", "assets", "liabilities", "cashflow", "pershare", "debt"],
-                default="income",
-            )
-            cat_map = {
-                "income": "Income Statement",
-                "comprehensive": "Comprehensive Income",
-                "assets": "Balance Sheet (Assets)",
-                "liabilities": "Balance Sheet (Liabilities & Equity)",
-                "cashflow": "Cash Flow",
-                "pershare": "Per Share & Shares",
-                "debt": "Debt Maturity Schedule",
-            }
-            render_detailed_financials(edgar_data, cat_map[sub])
-
-        elif choice == 11:
-            console.print("Loading recent SEC filings...")
-            filings = get_recent_filings(symbol, count=20)
-            render_sec_filings(filings)
-
-        elif choice == 12:
-            console.print("Loading insider transactions...")
-            txns = get_insider_transactions(symbol)
-            render_insider_transactions(txns)
-
-        elif choice == 13:
-            input_str = Prompt.ask(
-                "Enter tickers to compare (comma-separated, e.g., AAPL,MSFT,GOOGL)"
-            )
-            symbols = [s.strip().upper() for s in input_str.split(",") if s.strip()]
-            if symbol.upper() not in symbols:
-                symbols.insert(0, symbol.upper())
-
-            if len(symbols) < 2:
-                console.print("[red]Please enter at least 2 tickers to compare.[/red]")
-                continue
-
-            console.print(f"Loading comparison data for {', '.join(symbols)}...")
-            comp_data = get_comparison_data(symbols)
-            render_comparison(comp_data)
-
-        elif choice == 14:
-            input_str = Prompt.ask(
-                "Enter watchlist tickers (comma-separated, e.g., AAPL,TSLA,NVDA,MSFT,AMZN)"
-            )
-            symbols = [s.strip().upper() for s in input_str.split(",") if s.strip()]
-
-            if not symbols:
-                console.print("[red]Please enter at least 1 ticker.[/red]")
-                continue
-
-            console.print(f"Loading watchlist for {', '.join(symbols)}...")
-            watch_data = get_comparison_data(symbols)
-            render_watchlist(watch_data)
-
-        elif choice == 15:
-            filename = Prompt.ask("Output filename", default=f"{symbol.lower()}_report.html")
-            ratios = get_key_ratios(info)
-            price_df = get_price_history(ticker, period="1mo")
-            export_to_html(info, ratios, price_df, output_path=filename)
-
-        elif choice == 16:
-            run_mutual_funds_menu()
-
-        elif choice == 17:
+        if isinstance(command, ChangeTickerCommand):
             return True  # Signal to ask for a new ticker
 
-        else:
-            console.print("[red]Invalid option.[/red]")
+        if command is not None:
+            try:
+                command.execute(ctx)
+            except (TickerNotFoundError, DataFetchError) as exc:
+                console.print(f"[red]{exc}[/red]")
+            except KeyboardInterrupt:
+                console.print("\n[dim]Cancelled.[/dim]")
 
 
-def main():
+# ── CLI entry point ───────────────────────────────────────────────────────────
+
+
+def main() -> None:
+    import argparse
+
     parser = argparse.ArgumentParser(
         description="Terminal-based stock fundamental analysis dashboard."
     )
@@ -365,7 +512,9 @@ def main():
     args = parser.parse_args()
 
     console.print(Rule("Fundamental Dashboard", style="bold blue"))
-    console.print("[dim]A terminal-based stock analysis tool powered by Yahoo Finance and Rich[/dim]\n")
+    console.print(
+        "[dim]A terminal-based stock analysis tool powered by Yahoo Finance and Rich[/dim]\n"
+    )
 
     while True:
         if args.symbol:

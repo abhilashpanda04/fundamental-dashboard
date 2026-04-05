@@ -1,6 +1,6 @@
 [project]
 name = "fundamental-dashboard"
-version = "0.1.0"
+version = "0.2.0"
 description = "A terminal-based stock fundamental analysis dashboard using Rich and Yahoo Finance."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -8,10 +8,18 @@ dependencies = [
     "yfinance>=0.2.30",
     "pandas>=2.0",
     "rich>=13.0",
+    "requests>=2.28",
 ]
 
 [project.scripts]
 dashboard = "dashboard.cli:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-mock>=3.12",
+    "pytest-cov>=4.1",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -19,3 +27,32 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dashboard"]
+
+# ── Pytest configuration ──────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+# Default: run all tests except those marked 'integration'
+addopts = "-v --tb=short -m 'not integration'"
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+markers = [
+    "integration: marks tests that make real network calls (deselected by default)",
+    "smoke:       marks lightweight sanity-check tests",
+    "unit:        marks fast, fully-mocked unit tests",
+]
+
+# ── Coverage configuration ────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["src/dashboard"]
+omit = ["*/__pycache__/*", "*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered  = false
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-cov>=7.1.0",
+    "pytest-mock>=3.15.1",
+]

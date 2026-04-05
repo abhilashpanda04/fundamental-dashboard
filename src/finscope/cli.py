@@ -208,6 +208,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # Graham Number
     console.print(Rule("Graham Number  [dim](src: Yahoo Finance — EPS, Book Value)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Stocks trading [bold]below[/bold] their Graham Number have a margin of safety. "
+                  "Formula: \u221a(22.5 \u00d7 EPS \u00d7 Book Value) \u2014 assumes max 15\u00d7 earnings and 1.5\u00d7 book value. "
+                  "Best for mature, asset-heavy companies. Most high-growth tech stocks fail this test because "
+                  "their value lies in intangibles, not book value.[/dim]")
     g = v.graham
     if g.calculable:
         console.print(f"  EPS: {g.eps:.2f}  |  Book Value: {g.book_value_per_share:.2f}")
@@ -219,6 +223,11 @@ def cmd_valuate(symbol: str) -> None:
 
     # DCF
     console.print(Rule("DCF (Discounted Cash Flow)  [dim](src: Yahoo Finance — Free Cash Flow, Beta, Growth)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Projects future free cash flows and discounts them to today's value. "
+                  "The most comprehensive intrinsic value model, but highly sensitive to inputs \u2014 "
+                  "a 2% change in growth rate can swing the result by 30\u201350%. "
+                  "Discount rate is estimated via CAPM (risk-free rate + beta \u00d7 market premium). "
+                  "Most reliable for companies with stable, predictable cash flows.[/dim]")
     d = v.dcf
     if d.calculable:
         console.print(f"  Free Cash Flow: ${d.free_cash_flow/1e9:.2f}B" if d.free_cash_flow else "")
@@ -232,6 +241,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # PEG Fair Value
     console.print(Rule("PEG Fair Value (Peter Lynch)  [dim](src: Yahoo Finance — EPS, Earnings Growth)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Peter Lynch's rule \u2014 a fairly valued stock has P/E equal to its "
+                  "earnings growth rate (PEG = 1). Fair price = growth rate \u00d7 EPS. "
+                  "PEG < 1: potentially undervalued relative to growth. PEG > 1.5: potentially overvalued. "
+                  "Unreliable when earnings are negative or highly volatile.[/dim]")
     p = v.peg
     if p.calculable:
         console.print(f"  EPS: {p.eps:.2f}  |  Growth Rate: {p.earnings_growth_rate:.1f}%")
@@ -244,6 +257,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # Relative
     console.print(Rule("Relative Valuation  [dim](src: Yahoo Finance — P/E, P/B, 50D/200D Averages)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Compares the current price to the stock's own moving averages and multiples. "
+                  "This is relative (not absolute) \u2014 trading below the 200D avg means historically cheap "
+                  "for [bold]this stock[/bold], not necessarily cheap in absolute terms. "
+                  "P/E < 12 is broadly cheap; P/E > 35 is expensive.[/dim]")
     r = v.relative
     if r.pe_current:
         console.print(f"  P/E: {r.pe_current:.1f}  |  P/B: {r.pb_current:.1f}" if r.pb_current else f"  P/E: {r.pe_current:.1f}")
@@ -261,6 +278,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # Piotroski
     console.print(Rule("Piotroski F-Score  [dim](src: Yahoo Finance — ROA, OCF, Margins, Ratios)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: A 9-point [bold]financial health[/bold] checklist, not a price model. "
+                  "4 pts for profitability, 3 for leverage/liquidity, 2 for efficiency. "
+                  "8\u20139 = financially strong (bullish signal), 5\u20137 = average, 0\u20134 = weak (bearish signal). "
+                  "A high score means strong fundamentals \u2014 a company can still be expensive with a high score.[/dim]")
     f = v.piotroski
     bar = "\u2588" * f.score + "\u2591" * (9 - f.score)
     score_color = "green" if f.score >= 7 else "yellow" if f.score >= 4 else "red"
@@ -271,6 +292,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # Altman Z-Score
     console.print(Rule("Altman Z-Score  [dim](src: Yahoo Finance — Assets, Liabilities, EBITDA, Revenue)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: A [bold]bankruptcy risk[/bold] indicator, not a valuation model. "
+                  "Z > 2.99 = Safe (low distress risk). 1.81\u20132.99 = Grey zone (monitor closely). "
+                  "Z < 1.81 = Distress zone (elevated bankruptcy risk). "
+                  "Originally designed for manufacturing companies \u2014 less reliable for asset-light tech or financial firms.[/dim]")
     a = v.altman
     if a.calculable:
         zone_colors = {"Safe": "green", "Grey": "yellow", "Distress": "bold red"}

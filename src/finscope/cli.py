@@ -725,6 +725,37 @@ class CommandRegistry:
         return [(k, label) for k, (label, _) in self._commands.items()]
 
 
+def _print_session_header(stock: Stock) -> None:
+    """Print a prominent session header once a ticker is loaded."""
+    info = stock.info
+    name     = info.get("longName") or info.get("shortName", stock.symbol)
+    symbol   = info.get("symbol", stock.symbol).upper()
+    price    = info.get("currentPrice") or info.get("regularMarketPrice", "N/A")
+    change   = info.get("regularMarketChangePercent", 0)
+    currency = info.get("currency", "USD")
+    sector   = info.get("sector", "")
+    industry = info.get("industry", "")
+    exchange = info.get("exchange", "")
+
+    price_color = "green" if isinstance(change, (int, float)) and change >= 0 else "red"
+    change_str  = f"[{price_color}]{change:+.2f}%[/{price_color}]" if isinstance(change, (int, float)) else ""
+
+    console.print()
+    console.print(Rule(style="blue"))
+    console.print(
+        f"  [bold white]{name}[/bold white]  "
+        f"[bold cyan]({symbol})[/bold cyan]  "
+        f"[dim]{exchange}[/dim]"
+    )
+    if sector:
+        console.print(f"  [dim italic]{sector}{' / ' + industry if industry else ''}[/dim italic]")
+    console.print(
+        f"  [{price_color}][bold]{currency} {price}[/bold][/{price_color}]  {change_str}"
+    )
+    console.print(Rule(style="blue"))
+    console.print()
+
+
 def _build_registry() -> CommandRegistry:
     return (
         CommandRegistry()
@@ -933,7 +964,7 @@ def run_interactive(
         console.print(f"[red]{exc}[/red]")
         return False
 
-    render_header(s.info, s.sparkline)
+    _print_session_header(s)
 
     ctx = DashboardContext(stock=s, fund_service=_fund_svc)
 
@@ -1143,10 +1174,23 @@ def _dispatch(parsed: argparse.Namespace) -> None:
 
 
 def _print_banner() -> None:
-    console.print(Rule("🔭 Finscope", style="bold blue"))
-    console.print(
-        "[dim]Terminal-based financial research · Yahoo Finance · SEC EDGAR · MFAPI[/dim]\n"
+    banner = (
+        "\n"
+        "  ███████╗██╗███╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗\n"
+        "  ██╔════╝██║████╗  ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝\n"
+        "  █████╗  ██║██╔██╗ ██║███████╗██║     ██║   ██║██████╔╝█████╗  \n"
+        "  ██╔══╝  ██║██║╚██╗██║╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  \n"
+        "  ██║     ██║██║ ╚████║███████║╚██████╗╚██████╔╝██║     ███████╗\n"
+        "  ╚═╝     ╚═╝╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝\n"
     )
+    console.print(f"[bold cyan]{banner}[/bold cyan]")
+    console.print(Rule(style="cyan"))
+    console.print(
+        "  [dim]Terminal-based financial research · "
+        "Yahoo Finance · SEC EDGAR · MFAPI.in[/dim]"
+    )
+    console.print(Rule(style="cyan"))
+    console.print()
 
 
 def main() -> None:

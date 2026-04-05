@@ -28,8 +28,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from rich.console import Console
-from rich.prompt import IntPrompt, Prompt
+from rich.prompt import Prompt
 from rich.rule import Rule
+import questionary
 
 import finscope as fs
 from finscope.exceptions import DataFetchError, FinScopeError, TickerNotFoundError
@@ -206,7 +207,7 @@ def cmd_valuate(symbol: str) -> None:
                   f"[red]{v.signals_bearish} bearish[/red]\n")
 
     # Graham Number
-    console.print(Rule("Graham Number", style="cyan"))
+    console.print(Rule("Graham Number  [dim](src: Yahoo Finance — EPS, Book Value)[/dim]", style="cyan"))
     g = v.graham
     if g.calculable:
         console.print(f"  EPS: {g.eps:.2f}  |  Book Value: {g.book_value_per_share:.2f}")
@@ -217,7 +218,7 @@ def cmd_valuate(symbol: str) -> None:
         console.print("  [dim]Cannot compute (negative EPS or book value)[/dim]")
 
     # DCF
-    console.print(Rule("DCF (Discounted Cash Flow)", style="cyan"))
+    console.print(Rule("DCF (Discounted Cash Flow)  [dim](src: Yahoo Finance — Free Cash Flow, Beta, Growth)[/dim]", style="cyan"))
     d = v.dcf
     if d.calculable:
         console.print(f"  Free Cash Flow: ${d.free_cash_flow/1e9:.2f}B" if d.free_cash_flow else "")
@@ -230,7 +231,7 @@ def cmd_valuate(symbol: str) -> None:
         console.print("  [dim]Cannot compute (missing FCF, growth, or share count)[/dim]")
 
     # PEG Fair Value
-    console.print(Rule("PEG Fair Value (Peter Lynch)", style="cyan"))
+    console.print(Rule("PEG Fair Value (Peter Lynch)  [dim](src: Yahoo Finance — EPS, Earnings Growth)[/dim]", style="cyan"))
     p = v.peg
     if p.calculable:
         console.print(f"  EPS: {p.eps:.2f}  |  Growth Rate: {p.earnings_growth_rate:.1f}%")
@@ -242,7 +243,7 @@ def cmd_valuate(symbol: str) -> None:
         console.print(f"  PEG Ratio: {p.peg_ratio:.2f}  → {p.signal}" if p.peg_ratio else "  [dim]Insufficient data[/dim]")
 
     # Relative
-    console.print(Rule("Relative Valuation", style="cyan"))
+    console.print(Rule("Relative Valuation  [dim](src: Yahoo Finance — P/E, P/B, 50D/200D Averages)[/dim]", style="cyan"))
     r = v.relative
     if r.pe_current:
         console.print(f"  P/E: {r.pe_current:.1f}  |  P/B: {r.pb_current:.1f}" if r.pb_current else f"  P/E: {r.pe_current:.1f}")
@@ -259,7 +260,7 @@ def cmd_valuate(symbol: str) -> None:
     console.print(f"  Signal: {r.signal}")
 
     # Piotroski
-    console.print(Rule("Piotroski F-Score", style="cyan"))
+    console.print(Rule("Piotroski F-Score  [dim](src: Yahoo Finance — ROA, OCF, Margins, Ratios)[/dim]", style="cyan"))
     f = v.piotroski
     bar = "\u2588" * f.score + "\u2591" * (9 - f.score)
     score_color = "green" if f.score >= 7 else "yellow" if f.score >= 4 else "red"
@@ -269,7 +270,7 @@ def cmd_valuate(symbol: str) -> None:
         console.print(f"    {icon} {criterion}")
 
     # Altman Z-Score
-    console.print(Rule("Altman Z-Score", style="cyan"))
+    console.print(Rule("Altman Z-Score  [dim](src: Yahoo Finance — Assets, Liabilities, EBITDA, Revenue)[/dim]", style="cyan"))
     a = v.altman
     if a.calculable:
         zone_colors = {"Safe": "green", "Grey": "yellow", "Distress": "bold red"}
@@ -281,7 +282,7 @@ def cmd_valuate(symbol: str) -> None:
     else:
         console.print("  [dim]Insufficient balance sheet data[/dim]")
 
-    render_attribution("Yahoo Finance, SEC EDGAR")
+    render_attribution("Yahoo Finance (fundamentals) · SEC EDGAR (balance sheet)")
     console.print()
 
 
@@ -309,6 +310,7 @@ def cmd_export(symbol: str, output: str | None = None) -> None:
     s = _load_stock(symbol)
     path = s.export_html(output)
     console.print(f"\n[bold green]✓ Report exported to {path}[/bold green]")
+    render_attribution("Yahoo Finance")
 
 
 def cmd_screen(query: str) -> None:
@@ -439,6 +441,7 @@ def cmd_analyze(symbol: str) -> None:
     s_color = sentiment_colors.get(analysis.sentiment, "white")
     console.print(f"\n[bold]Sentiment:[/bold] [{s_color}]{analysis.sentiment}[/{s_color}]")
     console.print(f"[bold]Confidence:[/bold] {analysis.confidence}\n")
+    render_attribution(f"Yahoo Finance · SEC EDGAR · {status['provider']} (AI)")
 
 
 def cmd_ask(symbol: str, question: str) -> None:
@@ -454,6 +457,7 @@ def cmd_ask(symbol: str, question: str) -> None:
 
     console.print(Rule(f"Q: {question}", style="cyan"))
     console.print(f"\n{answer}\n")
+    render_attribution(f"Yahoo Finance · {status['provider']} (AI)")
 
 
 def cmd_ai_compare(symbols: list[str]) -> None:
@@ -491,6 +495,7 @@ def cmd_ai_compare(symbols: list[str]) -> None:
     for profile, rec in insight.best_for.items():
         console.print(f"  [cyan]{profile}:[/cyan] {rec}")
     console.print()
+    render_attribution(f"Yahoo Finance · {status['provider']} (AI)")
 
 
 def cmd_summarize_filings(symbol: str) -> None:
@@ -523,6 +528,7 @@ def cmd_summarize_filings(symbol: str) -> None:
         for c in summary.notable_changes:
             console.print(f"  → {c}")
     console.print()
+    render_attribution(f"SEC EDGAR · {status['provider']} (AI)")
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -685,6 +691,7 @@ class ExportHtmlCommand(DashboardCommand):
         filename = Prompt.ask("Output filename", default=f"{ctx.symbol.lower()}_report.html")
         path = ctx.stock.export_html(filename)
         console.print(f"\n[bold green]✓ Report exported to {path}[/bold green]")
+        render_attribution("Yahoo Finance")
 
 
 class MutualFundsCommand(DashboardCommand):
@@ -724,6 +731,37 @@ class CommandRegistry:
         return [(k, label) for k, (label, _) in self._commands.items()]
 
 
+def _print_session_header(stock: Stock) -> None:
+    """Print a prominent session header once a ticker is loaded."""
+    info = stock.info
+    name     = info.get("longName") or info.get("shortName", stock.symbol)
+    symbol   = info.get("symbol", stock.symbol).upper()
+    price    = info.get("currentPrice") or info.get("regularMarketPrice", "N/A")
+    change   = info.get("regularMarketChangePercent", 0)
+    currency = info.get("currency", "USD")
+    sector   = info.get("sector", "")
+    industry = info.get("industry", "")
+    exchange = info.get("exchange", "")
+
+    price_color = "green" if isinstance(change, (int, float)) and change >= 0 else "red"
+    change_str  = f"[{price_color}]{change:+.2f}%[/{price_color}]" if isinstance(change, (int, float)) else ""
+
+    console.print()
+    console.print(Rule(style="blue"))
+    console.print(
+        f"  [bold white]{name}[/bold white]  "
+        f"[bold cyan]({symbol})[/bold cyan]  "
+        f"[dim]{exchange}[/dim]"
+    )
+    if sector:
+        console.print(f"  [dim italic]{sector}{' / ' + industry if industry else ''}[/dim italic]")
+    console.print(
+        f"  [{price_color}][bold]{currency} {price}[/bold][/{price_color}]  {change_str}"
+    )
+    console.print(Rule(style="blue"))
+    console.print()
+
+
 def _build_registry() -> CommandRegistry:
     return (
         CommandRegistry()
@@ -751,13 +789,35 @@ def _build_registry() -> CommandRegistry:
 _REGISTRY = _build_registry()
 
 
-def _show_menu() -> None:
+def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerCommand:
+    """Show the interactive menu using questionary (arrow keys + enter)."""
     console.print()
-    console.print(Rule("Menu", style="blue"))
+    
+    choices = []
     for key, label in _REGISTRY.items():
-        style = "red" if key == 0 else "cyan"
-        console.print(f"  [{style}][{key:>2}][/{style}] {label}")
-    console.print()
+        if key == 0:
+            choices.append(questionary.Separator())
+        choices.append(questionary.Choice(title=label, value=key))
+        
+    choice_key = questionary.select(
+        "Select an option:",
+        choices=choices,
+        style=questionary.Style([
+            ('qmark', 'fg:cyan bold'),
+            ('question', 'bold'),
+            ('answer', 'fg:green bold'),
+            ('pointer', 'fg:cyan bold'),
+            ('highlighted', 'fg:cyan bold'),
+            ('selected', 'fg:green'),
+            ('separator', 'fg:darkgray'),
+        ]),
+        instruction="(Use arrow keys to move, Enter to select)"
+    ).ask()
+
+    if choice_key is None or choice_key == 0:
+        return None
+        
+    return _REGISTRY.get(choice_key)
 
 
 # ── Mutual Funds sub-menu ─────────────────────────────────────────────────────
@@ -785,15 +845,21 @@ _REGION_MAP = {
 def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
     while True:
         console.print()
-        console.print(Rule("Mutual Funds", style="bold green"))
+        
+        choices = []
         for key, label in _MF_MENU.items():
-            style = "red" if key == 0 else "cyan"
-            console.print(f"  [{style}][{key}][/{style}] {label}")
-        console.print()
+            if key == 0:
+                choices.append(questionary.Separator())
+            choices.append(questionary.Choice(title=label, value=key))
+            
+        choice = questionary.select(
+            "Select Mutual Funds category:",
+            choices=choices,
+            style=questionary.Style([('pointer', 'fg:green bold'), ('highlighted', 'fg:green bold')]),
+            instruction="(Use arrow keys to move, Enter to select)"
+        ).ask()
 
-        choice = IntPrompt.ask("Select", default=0)
-
-        if choice == 0:
+        if choice is None or choice == 0:
             return
 
         if choice == 1:
@@ -819,22 +885,22 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
             render_global_fund_detail(sym, f.info, f.returns, f.sparkline)
             render_attribution("Yahoo Finance")
 
-        else:
-            console.print("[red]Invalid option.[/red]")
-
 
 def _india_fund_flow(fund_service: FundAnalysisService) -> None:
     while True:
         console.print()
-        console.print(Rule("Indian Mutual Funds  (MFAPI.in — 37,500+ funds)", style="green"))
-        console.print("  [cyan][1][/cyan] Search by name")
-        console.print("  [cyan][2][/cyan] Look up by scheme code")
-        console.print("  [red][0][/red] Back")
-        console.print()
+        sub = questionary.select(
+            "Indian Mutual Funds (MFAPI.in — 37,500+ funds):",
+            choices=[
+                questionary.Choice("Search by name", 1),
+                questionary.Choice("Look up by scheme code", 2),
+                questionary.Separator(),
+                questionary.Choice("Back", 0),
+            ],
+            style=questionary.Style([('pointer', 'fg:cyan bold'), ('highlighted', 'fg:cyan bold')])
+        ).ask()
 
-        sub = IntPrompt.ask("Select", default=0)
-
-        if sub == 0:
+        if sub is None or sub == 0:
             return
 
         if sub == 1:
@@ -904,34 +970,26 @@ def run_interactive(
         console.print(f"[red]{exc}[/red]")
         return False
 
-    render_header(s.info, s.sparkline)
+    _print_session_header(s)
 
     ctx = DashboardContext(stock=s, fund_service=_fund_svc)
 
     while True:
-        _show_menu()
-        choice = IntPrompt.ask("Select an option", default=1)
+        command = _show_menu(ctx)
 
-        if choice == 0:
+        if command is None:
             console.print("[dim]Goodbye.[/dim]")
             sys.exit(0)
-
-        command = _REGISTRY.get(choice)
-
-        if command is None and choice != 0:
-            console.print("[red]Invalid option.[/red]")
-            continue
 
         if isinstance(command, ChangeTickerCommand):
             return True
 
-        if command is not None:
-            try:
-                command.execute(ctx)
-            except (TickerNotFoundError, DataFetchError) as exc:
-                console.print(f"[red]{exc}[/red]")
-            except KeyboardInterrupt:
-                console.print("\n[dim]Cancelled.[/dim]")
+        try:
+            command.execute(ctx)
+        except (TickerNotFoundError, DataFetchError) as exc:
+            console.print(f"[red]{exc}[/red]")
+        except KeyboardInterrupt:
+            console.print("\n[dim]Cancelled.[/dim]")
 
 
 # Keep backward compat name
@@ -1024,21 +1082,18 @@ def _dispatch(parsed: argparse.Namespace) -> None:
     interactive: bool = parsed.interactive
 
     # ── No arguments at all → interactive prompt ──────────────────────────
-    if not args and interactive:
+    if not args:
         _print_banner()
         while True:
-            symbol = Prompt.ask("Enter a stock ticker (e.g., AAPL, TSLA, MSFT)")
+            symbol = Prompt.ask("Enter a stock ticker (e.g., AAPL, TSLA, MSFT, or 'exit' to quit)")
+            if symbol.strip().lower() in ('exit', 'quit', 'q'):
+                console.print("[dim]Goodbye.[/dim]")
+                break
             if not symbol.strip():
-                console.print("[red]Please enter a valid ticker.[/red]")
                 continue
             change = run_interactive(symbol.strip().upper())
             if not change:
                 break
-        return
-
-    if not args:
-        _print_banner()
-        console.print("[dim]Run [bold]finscope --help[/bold] for usage, or [bold]finscope -i[/bold] for interactive mode.[/dim]\n")
         return
 
     first = args[0].lower()
@@ -1089,7 +1144,9 @@ def _dispatch(parsed: argparse.Namespace) -> None:
             change = run_interactive(symbol)
             if not change:
                 break
-            symbol = Prompt.ask("Enter a stock ticker").strip().upper()
+            symbol = Prompt.ask("Enter a stock ticker (or 'exit' to quit)").strip().upper()
+            if symbol.lower() in ('exit', 'quit', 'q'):
+                break
         return
 
     # Direct subcommand dispatch
@@ -1123,10 +1180,23 @@ def _dispatch(parsed: argparse.Namespace) -> None:
 
 
 def _print_banner() -> None:
-    console.print(Rule("🔭 Finscope", style="bold blue"))
-    console.print(
-        "[dim]Terminal-based financial research · Yahoo Finance · SEC EDGAR · MFAPI[/dim]\n"
+    banner = (
+        "\n"
+        "  ███████╗██╗███╗   ██╗███████╗ ██████╗ ██████╗ ██████╗ ███████╗\n"
+        "  ██╔════╝██║████╗  ██║██╔════╝██╔════╝██╔═══██╗██╔══██╗██╔════╝\n"
+        "  █████╗  ██║██╔██╗ ██║███████╗██║     ██║   ██║██████╔╝█████╗  \n"
+        "  ██╔══╝  ██║██║╚██╗██║╚════██║██║     ██║   ██║██╔═══╝ ██╔══╝  \n"
+        "  ██║     ██║██║ ╚████║███████║╚██████╗╚██████╔╝██║     ███████╗\n"
+        "  ╚═╝     ╚═╝╚═╝  ╚═══╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝     ╚══════╝\n"
     )
+    console.print(f"[bold cyan]{banner}[/bold cyan]")
+    console.print(Rule(style="cyan"))
+    console.print(
+        "  [dim]Terminal-based financial research · "
+        "Yahoo Finance · SEC EDGAR · MFAPI.in[/dim]"
+    )
+    console.print(Rule(style="cyan"))
+    console.print()
 
 
 def main() -> None:

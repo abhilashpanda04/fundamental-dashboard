@@ -7,10 +7,12 @@ high-level API consumed exclusively by the CLI layer.
 from __future__ import annotations
 
 import logging
-
-import pandas as pd
+from typing import TYPE_CHECKING
 
 __all__ = ["FundAnalysisService"]
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from finscope.exceptions import FundNotFoundError
 from finscope.providers.mfapi_provider import MfapiProvider
@@ -61,9 +63,8 @@ class FundAnalysisService:
         return self._provider.get_global_fund_sparkline(symbol, period)
 
     def get_price_history(self, symbol: str, period: str = "1mo") -> pd.DataFrame:
-        """Return full OHLCV price history from Yahoo Finance."""
-        import yfinance as yf
-        return yf.Ticker(symbol).history(period=period)
+        """Return full OHLCV price history from the configured provider."""
+        return self._provider.get_price_history(symbol, period)
 
     def get_popular_funds_snapshot(self, region: str) -> list[dict]:
         """Return a quick snapshot of popular funds for a region."""

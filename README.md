@@ -11,7 +11,7 @@
 
 Terminal-based financial research for stocks, ETFs, and mutual funds.
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/abhilashkumarpanda/finscope)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/abhilashpanda04/finscope)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -54,7 +54,7 @@ It is built for people who want fast, structured financial research without depe
 ### Install from source
 
 ```bash
-git clone https://github.com/abhilashkumarpanda/finscope.git
+git clone https://github.com/abhilashpanda04/finscope.git
 cd finscope
 uv sync
 ```

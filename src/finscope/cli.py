@@ -1642,11 +1642,11 @@ def _build_registry() -> CommandRegistry:
         .register(19, "Compare Stocks",                        CompareStocksCommand())
         .register(20, "Watchlist",                             WatchlistCommand())
         # ── AI ─────────────────────────────────────────────────────────────
-        .register(17, "\U0001f9e0  AI Analysis →",              AIAnalysisCommand())
+        .register(21, "AI Analysis →",                         AIAnalysisCommand())
         # ── Utilities ──────────────────────────────────────────────────────
         .register(22, "Export Report to HTML",                 ExportHtmlCommand())
         .register(23, "Mutual Funds",                          MutualFundsCommand())
-        .register(20, "Change Ticker",                         ChangeTickerCommand())
+        .register(24, "Change Ticker",                         ChangeTickerCommand())
         .register(0,  "Exit",                                  None)
     )
 
@@ -1660,9 +1660,13 @@ def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerC
     
     # Get some quick stats for the header
     info = ctx.stock.info
-    price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
-    change = info.get("regularMarketChangePercent", 0)
-    color = "green" if change >= 0 else "red"
+    raw_price = info.get("currentPrice") or info.get("regularMarketPrice")
+    raw_change = info.get("regularMarketChangePercent")
+    price = raw_price if isinstance(raw_price, (int, float)) else None
+    change = raw_change if isinstance(raw_change, (int, float)) else None
+    color = "green" if change is None or change >= 0 else "red"
+    price_str = f"{info.get('currency', 'USD')} {price:.2f}" if price is not None else f"{info.get('currency', 'USD')} N/A"
+    change_str = f"{change:+.2f}%" if change is not None else "N/A"
     
     # Header components
     col1 = Text.assemble(
@@ -1670,8 +1674,8 @@ def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerC
         (f"{info.get('sector', 'N/A')} | {info.get('industry', 'N/A')}", "dim")
     )
     col2 = Text.assemble(
-        (f"{info.get('currency', 'USD')} {price:.2f}\n", f"bold {color}"),
-        (f"{change:+.2f}%", color), (" (Daily Change)", "dim")
+        (f"{price_str}\n", f"bold {color}"),
+        (change_str, color if change is not None else "dim"), (" (Daily Change)", "dim")
     )
     col3 = Text.assemble(
         (f"Mkt Cap: {format_number(info.get('marketCap'))}\n", "bold blue"),

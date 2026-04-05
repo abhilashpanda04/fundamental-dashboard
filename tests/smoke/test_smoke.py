@@ -248,23 +248,40 @@ class TestCliSmoke:
         from finscope.cli import main
         assert callable(main)
 
-    def test_run_dashboard_exists(self):
-        from finscope.cli import run_dashboard
-        assert callable(run_dashboard)
+    def test_run_interactive_exists(self):
+        from finscope.cli import run_interactive
+        assert callable(run_interactive)
 
-    def test_run_dashboard_returns_false_on_invalid_ticker(self):
-        from finscope.cli import run_dashboard
+    def test_run_dashboard_alias(self):
+        from finscope.cli import run_dashboard, run_interactive
+        assert run_dashboard is run_interactive
+
+    def test_run_interactive_returns_false_on_invalid_ticker(self):
+        from finscope.cli import run_interactive
         from finscope.exceptions import TickerNotFoundError
         mock_service = MagicMock()
         mock_service.get_info.side_effect = TickerNotFoundError("INVALID")
 
         with patch("finscope.cli.console"):
-            result = run_dashboard(
+            result = run_interactive(
                 "INVALID",
                 stock_service=mock_service,
                 fund_service=MagicMock(),
             )
         assert result is False
+
+    def test_dispatch_no_args_does_not_crash(self):
+        from finscope.cli import _build_parser, _dispatch
+        ns = _build_parser().parse_args([])
+        with patch("finscope.cli._print_banner"), patch("finscope.cli.console"):
+            _dispatch(ns)
+
+    def test_dispatch_ticker_routes_to_overview(self):
+        from finscope.cli import _build_parser, _dispatch
+        ns = _build_parser().parse_args(["AAPL"])
+        with patch("finscope.cli.cmd_overview") as mock_cmd:
+            _dispatch(ns)
+        mock_cmd.assert_called_once_with("AAPL")
 
     def test_command_registry_has_17_numbered_options(self):
         from finscope.cli import _build_registry
@@ -278,11 +295,9 @@ class TestCliSmoke:
         for key, label in reg.items():
             cmd = reg.get(key)
             if key == 0:
-                assert cmd is None, "Exit key must have no command"
+                assert cmd is None
             else:
-                assert isinstance(cmd, DashboardCommand), (
-                    f"Key {key} ({label}) is not a DashboardCommand"
-                )
+                assert isinstance(cmd, DashboardCommand), f"Key {key} not a command"
 
 
 # ── Builder smoke test ────────────────────────────────────────────────────────

@@ -42,16 +42,60 @@ uv sync --dev        # or: pip install -e ".[dev]"
 
 ## Usage
 
-```bash
-# Interactive mode — prompts for a ticker
-finscope
+### Direct commands (default)
 
-# Jump straight to a ticker
-finscope AAPL
-finscope RELIANCE.NS
+```bash
+finscope AAPL                       # Quick overview
+finscope AAPL ratios                # Key financial ratios
+finscope AAPL price 1y              # Price history (1 year)
+finscope AAPL financials            # Income statement
+finscope AAPL balance-sheet         # Balance sheet
+finscope AAPL cashflow              # Cash flow statement
+finscope AAPL news                  # Recent news
+finscope AAPL analysts              # Analyst recommendations
+finscope AAPL holders               # Major holders
+finscope AAPL sec-financials        # SEC EDGAR XBRL financials
+finscope AAPL sec-filings           # Recent SEC filings
+finscope AAPL insiders              # Insider transactions
+finscope compare AAPL MSFT GOOGL    # Side-by-side comparison
+finscope watchlist AAPL TSLA NVDA   # Compact watchlist
+finscope export AAPL                # HTML report → aapl_report.html
+finscope export AAPL -o report.html # Custom output path
+finscope funds                      # Mutual funds explorer
 ```
 
-Once running, a numbered menu lets you drill into any data category.
+### Interactive mode (opt-in)
+
+```bash
+finscope AAPL -i          # Menu loop for AAPL
+finscope -i               # Prompts for ticker, then menu
+```
+
+### As a Python library
+
+```python
+import finscope
+
+# Single stock — lazy, cached, typed
+aapl = finscope.stock("AAPL")
+aapl.ratios.pe_ratio           # 28.5
+aapl.ratios.market_cap         # 2_700_000_000_000
+aapl.price_history("1y")       # pandas DataFrame
+aapl.sparkline                 # [100.0, 105.3, …]
+aapl.news                      # list of article dicts
+aapl.financials                # income statement DataFrame
+aapl.sec_financials            # XBRL data from SEC EDGAR
+aapl.insider_transactions      # Form 4 filings
+aapl.export_html()             # → aapl_report.html
+
+# Multi-stock comparison
+aapl.compare_with("MSFT", "GOOGL")    # list[ComparisonData]
+finscope.compare("AAPL", "MSFT")      # standalone
+
+# Global ETF / mutual fund
+vwrl = finscope.fund("VWRL.L")
+vwrl.info / vwrl.returns / vwrl.sparkline
+```
 
 ---
 
@@ -72,8 +116,8 @@ pytest --cov=finscope --cov-report=term-missing
 
 | Suite | Count | Network? | Purpose |
 |---|---|---|---|
-| `tests/smoke/` | 44 | ❌ | Imports, wiring, object construction |
-| `tests/unit/` | 153 | ❌ | All logic paths, fully mocked |
+| `tests/smoke/` | 54 | ❌ | Imports, wiring, object construction, dispatch |
+| `tests/unit/` | 244 | ❌ | All logic paths, fully mocked |
 | `tests/integration/` | 27 | ✅ | Real Yahoo / SEC EDGAR / MFAPI calls |
 
 ---
@@ -85,6 +129,8 @@ src/finscope/
 ├── exceptions.py          # Typed exception hierarchy
 ├── config.py              # Singleton Config (env-var aware)
 ├── models.py              # Typed dataclasses (KeyRatios, ComparisonData, …)
+│
+├── stock.py               # Stock + Fund façade classes (library entry points)
 │
 ├── providers/             # Strategy Pattern — one class per data source
 │   ├── base.py            #   Abstract interfaces
@@ -101,7 +147,7 @@ src/finscope/
 │   ├── builders.py        #   Builder Pattern for Rich tables
 │   └── renderers.py       #   All render functions
 │
-└── cli.py                 # Command Pattern — each menu item is a Command class
+└── cli.py                 # Direct subcommands + opt-in interactive menu (-i)
 ```
 
 ### Design patterns used

@@ -1,32 +1,39 @@
-"""CLI entry point — Command Pattern.
+"""CLI entry point — direct subcommands + opt-in interactive mode.
 
-Each menu option is a discrete ``Command`` object with a single
-``execute(ctx)`` method.  A ``CommandRegistry`` maps integer keys to command
-instances.  The main loop just dispatches to the registry — it never
-contains business logic itself.
+Direct commands (default)::
 
-This eliminates the giant if/elif chain and makes each feature independently
-testable and extendable without modifying existing code (Open/Closed
-Principle).
+    finscope AAPL                       # quick overview
+    finscope AAPL ratios                # key ratios
+    finscope AAPL price 1y              # price history
+    finscope AAPL news                  # recent news
+    finscope compare AAPL MSFT GOOGL    # side-by-side
+    finscope watchlist AAPL TSLA NVDA   # compact watchlist
+    finscope export AAPL                # HTML report
+    finscope funds                      # mutual funds (interactive sub-menu)
 
-The CLI is just **one consumer** of the ``finscope`` library.  All data
-access goes through the same :class:`finscope.Stock` class that end-users
-import in their own scripts.
+Interactive mode (opt-in)::
+
+    finscope AAPL -i          # menu loop for AAPL
+    finscope -i               # prompts for ticker, then menu
+
+Architecture: the CLI is just a thin consumer of the ``finscope`` library.
+All data flows through :class:`finscope.Stock`.
 """
 
 from __future__ import annotations
 
+import argparse
 import sys
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
 
 from rich.console import Console
 from rich.prompt import IntPrompt, Prompt
 from rich.rule import Rule
 
-from finscope.exceptions import DataFetchError, TickerNotFoundError
-from finscope.services import FundAnalysisService, StockAnalysisService
+import finscope as fs
+from finscope.exceptions import DataFetchError, FinScopeError, TickerNotFoundError
+from finscope.services import FundAnalysisService
 from finscope.stock import Stock
 from finscope.ui import (
     export_to_html,
@@ -53,22 +60,148 @@ from finscope.ui import (
 
 console = Console()
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  DIRECT CLI COMMANDS
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# ── Context ────────────────────────────────────────────────────────────────────
+# Top-level keywords that are NOT ticker symbols
+_KEYWORDS = {"compare", "watchlist", "export", "funds"}
+
+# Valid stock sub-commands
+_STOCK_SUBCOMMANDS = {
+    "ratios", "price", "financials", "balance-sheet", "cashflow",
+    "news", "analysts", "holders", "sec-financials", "sec-filings",
+    "insiders", "overview",
+}
+
+_SEC_CAT_MAP = {
+    "income": "Income Statement",
+    "comprehensive": "Comprehensive Income",
+    "assets": "Balance Sheet (Assets)",
+    "liabilities": "Balance Sheet (Liabilities & Equity)",
+    "cashflow": "Cash Flow",
+    "pershare": "Per Share & Shares",
+    "debt": "Debt Maturity Schedule",
+}
+
+
+def _load_stock(symbol: str) -> Stock:
+    """Create and validate a Stock object, printing a loading message."""
+    console.print(f"\nLoading [bold cyan]{symbol.upper()}[/bold cyan]...\n")
+    s = fs.stock(symbol)
+    _ = s.info  # trigger fetch to validate ticker
+    return s
+
+
+def cmd_overview(symbol: str) -> None:
+    """Quick overview: header + description + ratios."""
+    s = _load_stock(symbol)
+    render_header(s.info, s.sparkline)
+    render_description(s.info)
+    render_ratios(s.ratios.to_display_dict())
+
+
+def cmd_ratios(symbol: str) -> None:
+    s = _load_stock(symbol)
+    render_header(s.info, s.sparkline)
+    render_ratios(s.ratios.to_display_dict())
+
+
+def cmd_price(symbol: str, period: str = "1mo") -> None:
+    s = _load_stock(symbol)
+    df = s.price_history(period)
+    sparkline = s._service.get_sparkline(symbol, period=period)
+    render_price_history(df, period, sparkline)
+
+
+def cmd_financials(symbol: str) -> None:
+    s = _load_stock(symbol)
+    render_financials(s.financials, "Income Statement")
+
+
+def cmd_balance_sheet(symbol: str) -> None:
+    s = _load_stock(symbol)
+    render_financials(s.balance_sheet, "Balance Sheet")
+
+
+def cmd_cashflow(symbol: str) -> None:
+    s = _load_stock(symbol)
+    render_financials(s.cashflow, "Cash Flow Statement")
+
+
+def cmd_news(symbol: str) -> None:
+    s = _load_stock(symbol)
+    render_header(s.info, s.sparkline)
+    render_news(s.news)
+
+
+def cmd_analysts(symbol: str) -> None:
+    s = _load_stock(symbol)
+    render_header(s.info, s.sparkline)
+    render_analyst_recommendations(s.analyst_recommendations)
+
+
+def cmd_holders(symbol: str) -> None:
+    s = _load_stock(symbol)
+    breakdown, institutional = s.holders
+    render_major_holders(breakdown, institutional)
+
+
+def cmd_sec_financials(symbol: str, category: str = "income") -> None:
+    s = _load_stock(symbol)
+    cat_label = _SEC_CAT_MAP.get(category, "Income Statement")
+    edgar_data = s.sec_financials
+    if not edgar_data:
+        console.print("[red]No SEC EDGAR data found for this ticker.[/red]")
+        return
+    render_detailed_financials(edgar_data, cat_label)
+
+
+def cmd_sec_filings(symbol: str) -> None:
+    s = _load_stock(symbol)
+    render_sec_filings(s.sec_filings(count=20))
+
+
+def cmd_insiders(symbol: str) -> None:
+    s = _load_stock(symbol)
+    render_insider_transactions(s.insider_transactions)
+
+
+def cmd_compare(symbols: list[str]) -> None:
+    if len(symbols) < 2:
+        console.print("[red]Please provide at least 2 tickers to compare.[/red]")
+        return
+    console.print(f"\nComparing [bold cyan]{', '.join(symbols)}[/bold cyan]...\n")
+    data = fs.compare(*symbols)
+    render_comparison([vars(d) for d in data])
+
+
+def cmd_watchlist(symbols: list[str]) -> None:
+    if not symbols:
+        console.print("[red]Please provide at least 1 ticker.[/red]")
+        return
+    console.print(f"\nLoading watchlist for [bold cyan]{', '.join(symbols)}[/bold cyan]...\n")
+    data = fs.compare(*symbols)
+    render_watchlist([vars(d) for d in data])
+
+
+def cmd_export(symbol: str, output: str | None = None) -> None:
+    s = _load_stock(symbol)
+    path = s.export_html(output)
+    console.print(f"\n[bold green]✓ Report exported to {path}[/bold green]")
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  INTERACTIVE MODE (opt-in with -i)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
 @dataclass
 class DashboardContext:
-    """Shared state passed to every command during a CLI session.
-
-    Wraps a :class:`finscope.Stock` object — the same class library users
-    get when they call ``finscope.stock("AAPL")``.
-    """
+    """Shared state for the interactive menu session."""
 
     stock: Stock
     fund_service: FundAnalysisService
-
-    # ── Convenience aliases ──────────────────────────────────────────────────
 
     @property
     def symbol(self) -> str:
@@ -83,15 +216,12 @@ class DashboardContext:
         return self.stock.sparkline
 
 
-# ── Command base class ────────────────────────────────────────────────────────
-
-
 class DashboardCommand(ABC):
-    """Abstract base for menu commands (Command Pattern)."""
+    """Abstract base for interactive menu commands (Command Pattern)."""
 
     @abstractmethod
     def execute(self, ctx: DashboardContext) -> None:
-        """Run this command using data from *ctx*."""
+        ...
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<{self.__class__.__name__}>"
@@ -99,26 +229,18 @@ class DashboardCommand(ABC):
 
 # ── Concrete commands ─────────────────────────────────────────────────────────
 
-
 class OverviewCommand(DashboardCommand):
-    """Show company overview panel and description."""
-
     def execute(self, ctx: DashboardContext) -> None:
         render_header(ctx.info, ctx.sparkline)
         render_description(ctx.info)
 
 
 class KeyRatiosCommand(DashboardCommand):
-    """Show key financial ratios."""
-
     def execute(self, ctx: DashboardContext) -> None:
-        ratios = ctx.stock.ratios.to_display_dict()
-        render_ratios(ratios)
+        render_ratios(ctx.stock.ratios.to_display_dict())
 
 
 class PriceHistoryCommand(DashboardCommand):
-    """Show price history with sparkline for a user-chosen period."""
-
     def execute(self, ctx: DashboardContext) -> None:
         period = Prompt.ask(
             "Period",
@@ -162,35 +284,20 @@ class MajorHoldersCommand(DashboardCommand):
 
 
 class SecDetailedFinancialsCommand(DashboardCommand):
-    _CAT_MAP = {
-        "income": "Income Statement",
-        "comprehensive": "Comprehensive Income",
-        "assets": "Balance Sheet (Assets)",
-        "liabilities": "Balance Sheet (Liabilities & Equity)",
-        "cashflow": "Cash Flow",
-        "pershare": "Per Share & Shares",
-        "debt": "Debt Maturity Schedule",
-    }
-
     def execute(self, ctx: DashboardContext) -> None:
         console.print("Loading detailed financials from SEC EDGAR...")
         edgar_data = ctx.stock.sec_financials
         if not edgar_data:
             console.print("[red]No SEC EDGAR data found for this ticker.[/red]")
             return
-        sub = Prompt.ask(
-            "Category",
-            choices=list(self._CAT_MAP),
-            default="income",
-        )
-        render_detailed_financials(edgar_data, self._CAT_MAP[sub])
+        sub = Prompt.ask("Category", choices=list(_SEC_CAT_MAP), default="income")
+        render_detailed_financials(edgar_data, _SEC_CAT_MAP[sub])
 
 
 class SecFilingsCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         console.print("Loading recent SEC filings...")
-        filings = ctx.stock.sec_filings(count=20)
-        render_sec_filings(filings)
+        render_sec_filings(ctx.stock.sec_filings(count=20))
 
 
 class InsiderTransactionsCommand(DashboardCommand):
@@ -201,75 +308,59 @@ class InsiderTransactionsCommand(DashboardCommand):
 
 class CompareStocksCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
-        input_str = Prompt.ask(
-            "Enter tickers to compare (comma-separated, e.g., AAPL,MSFT,GOOGL)"
-        )
+        input_str = Prompt.ask("Enter tickers (comma-separated, e.g., AAPL,MSFT,GOOGL)")
         symbols = [s.strip().upper() for s in input_str.split(",") if s.strip()]
         if ctx.symbol not in symbols:
             symbols.insert(0, ctx.symbol)
         if len(symbols) < 2:
             console.print("[red]Please enter at least 2 tickers.[/red]")
             return
-        console.print(f"Loading comparison data for {', '.join(symbols)}...")
-        comp_data = ctx.stock.compare_with(*symbols[1:])
-        render_comparison([vars(d) for d in comp_data])
+        console.print(f"Loading comparison for {', '.join(symbols)}...")
+        data = ctx.stock.compare_with(*symbols[1:])
+        render_comparison([vars(d) for d in data])
 
 
 class WatchlistCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
-        input_str = Prompt.ask(
-            "Enter watchlist tickers (comma-separated, e.g., AAPL,TSLA,NVDA)"
-        )
+        input_str = Prompt.ask("Enter tickers (comma-separated, e.g., AAPL,TSLA,NVDA)")
         symbols = [s.strip().upper() for s in input_str.split(",") if s.strip()]
         if not symbols:
             console.print("[red]Please enter at least 1 ticker.[/red]")
             return
         console.print(f"Loading watchlist for {', '.join(symbols)}...")
-        import finscope
-        watch_data = finscope.compare(*symbols)
-        render_watchlist([vars(d) for d in watch_data])
+        data = fs.compare(*symbols)
+        render_watchlist([vars(d) for d in data])
 
 
 class ExportHtmlCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
-        filename = Prompt.ask(
-            "Output filename", default=f"{ctx.symbol.lower()}_report.html"
-        )
+        filename = Prompt.ask("Output filename", default=f"{ctx.symbol.lower()}_report.html")
         path = ctx.stock.export_html(filename)
-        console.print(f"\n[bold green]Report exported to {path}[/bold green]")
+        console.print(f"\n[bold green]✓ Report exported to {path}[/bold green]")
 
 
 class MutualFundsCommand(DashboardCommand):
-    """Launches the mutual funds sub-menu."""
-
     def execute(self, ctx: DashboardContext) -> None:
         _run_mutual_funds_menu(ctx.fund_service)
 
 
 class ChangeTickerCommand(DashboardCommand):
-    """Signals the main loop to ask for a new ticker symbol.
-
-    The main loop checks ``isinstance(command, ChangeTickerCommand)`` and
-    returns ``True`` to trigger a ticker change instead of calling ``execute``.
-    This ``execute`` implementation is a no-op safety fallback.
-    """
+    """Signals the main loop to ask for a new ticker symbol."""
 
     def execute(self, ctx: DashboardContext) -> None:  # pragma: no cover
-        pass  # Handled as a sentinel in the main loop; never called directly.
+        pass
 
 
 # ── Command Registry ──────────────────────────────────────────────────────────
 
 
 class CommandRegistry:
-    """Maps integer menu keys to (label, DashboardCommand) pairs."""
+    """Maps integer menu keys to (label, command) pairs."""
 
     def __init__(self) -> None:
         self._commands: dict[int, tuple[str, DashboardCommand | None]] = {}
 
-    def register(
-        self, key: int, label: str, command: DashboardCommand | None = None
-    ) -> "CommandRegistry":
+    def register(self, key: int, label: str, command: DashboardCommand | None = None) -> "CommandRegistry":
         self._commands[key] = (label, command)
         return self
 
@@ -286,7 +377,6 @@ class CommandRegistry:
 
 
 def _build_registry() -> CommandRegistry:
-    """Construct and return the main command registry."""
     return (
         CommandRegistry()
         .register(1,  "Company Overview",                     OverviewCommand())
@@ -373,8 +463,7 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
                 continue
             sym = sym.strip().upper()
             console.print(f"Loading data for {sym}...")
-            import finscope
-            f = finscope.fund(sym)
+            f = fs.fund(sym)
             if not f.info:
                 console.print(f"[red]Could not find fund: {sym}[/red]")
                 continue
@@ -405,7 +494,7 @@ def _india_fund_flow(fund_service: FundAnalysisService) -> None:
             results = fund_service.search_india_funds(query.strip())
             render_india_fund_search_results(results)
             if results:
-                code = Prompt.ask("Enter scheme code to view details (or press Enter to skip)", default="")
+                code = Prompt.ask("Enter scheme code (or press Enter to skip)", default="")
                 if code.strip():
                     _show_india_fund(fund_service, code.strip())
 
@@ -436,26 +525,26 @@ def _show_india_fund(fund_service: FundAnalysisService, scheme_code: str) -> Non
         console.print(f"  1Y NAV Trend: {make_sparkline(spark_vals, width=60)}")
 
 
-# ── Main loop ─────────────────────────────────────────────────────────────────
+# ── Interactive loop ──────────────────────────────────────────────────────────
 
 
-def run_dashboard(
+def run_interactive(
     symbol: str,
-    stock_service: StockAnalysisService | None = None,
+    stock_service: fs.StockAnalysisService | None = None,
     fund_service: FundAnalysisService | None = None,
 ) -> bool:
-    """Run the interactive CLI for *symbol*.
+    """Run the interactive menu for *symbol*.
 
     Returns ``True`` when the user selects "Change Ticker", ``False`` on exit.
     """
-    _stock_svc = stock_service or StockAnalysisService()
+    _stock_svc = stock_service or fs.StockAnalysisService()
     _fund_svc = fund_service or FundAnalysisService()
 
     console.print(f"\nLoading data for [bold cyan]{symbol.upper()}[/bold cyan]...\n")
 
     try:
         s = Stock(symbol, service=_stock_svc)
-        _ = s.info  # Trigger the initial fetch — validates the ticker
+        _ = s.info
     except TickerNotFoundError:
         console.print(f"[red]Could not find ticker: {symbol}[/red]")
         return False
@@ -493,37 +582,191 @@ def run_dashboard(
                 console.print("\n[dim]Cancelled.[/dim]")
 
 
-# ── CLI entry point ───────────────────────────────────────────────────────────
+# Keep backward compat name
+run_dashboard = run_interactive
+
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#  MAIN ENTRY POINT
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+_USAGE_EXAMPLES = """
+examples:
+  finscope AAPL                     Quick overview
+  finscope AAPL ratios              Key financial ratios
+  finscope AAPL price 1y            Price history (1 year)
+  finscope AAPL financials          Income statement
+  finscope AAPL balance-sheet       Balance sheet
+  finscope AAPL cashflow            Cash flow statement
+  finscope AAPL news                Recent news
+  finscope AAPL analysts            Analyst recommendations
+  finscope AAPL holders             Major holders
+  finscope AAPL sec-financials      SEC EDGAR XBRL financials
+  finscope AAPL sec-filings         Recent SEC filings
+  finscope AAPL insiders            Insider transactions
+  finscope compare AAPL MSFT GOOGL  Side-by-side comparison
+  finscope watchlist AAPL TSLA NVDA Compact watchlist
+  finscope export AAPL              HTML report
+  finscope funds                    Mutual funds explorer
+  finscope AAPL -i                  Interactive menu mode
+"""
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="finscope",
+        description="Finscope — terminal-based financial research tool.",
+        epilog=_USAGE_EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "args",
+        nargs="*",
+        metavar="TICKER|COMMAND",
+        help="Ticker symbol or command (compare, watchlist, export, funds)",
+    )
+    parser.add_argument(
+        "-i", "--interactive",
+        action="store_true",
+        help="Launch interactive menu mode",
+    )
+    parser.add_argument(
+        "-o", "--output",
+        help="Output file path (for export command)",
+    )
+    parser.add_argument(
+        "--period",
+        default="1mo",
+        help="Time period for price history (default: 1mo)",
+    )
+    parser.add_argument(
+        "--category",
+        default="income",
+        choices=list(_SEC_CAT_MAP),
+        help="SEC financials category (default: income)",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"finscope {fs.__version__}",
+    )
+    return parser
+
+
+def _dispatch(parsed: argparse.Namespace) -> None:
+    """Route parsed CLI args to the right command function."""
+    args: list[str] = parsed.args
+    interactive: bool = parsed.interactive
+
+    # ── No arguments at all → interactive prompt ──────────────────────────
+    if not args and interactive:
+        _print_banner()
+        while True:
+            symbol = Prompt.ask("Enter a stock ticker (e.g., AAPL, TSLA, MSFT)")
+            if not symbol.strip():
+                console.print("[red]Please enter a valid ticker.[/red]")
+                continue
+            change = run_interactive(symbol.strip().upper())
+            if not change:
+                break
+        return
+
+    if not args:
+        _print_banner()
+        console.print("[dim]Run [bold]finscope --help[/bold] for usage, or [bold]finscope -i[/bold] for interactive mode.[/dim]\n")
+        return
+
+    first = args[0].lower()
+
+    # ── Top-level keyword commands ────────────────────────────────────────
+    if first == "compare":
+        symbols = [s.upper() for s in args[1:]]
+        cmd_compare(symbols)
+        return
+
+    if first == "watchlist":
+        symbols = [s.upper() for s in args[1:]]
+        cmd_watchlist(symbols)
+        return
+
+    if first == "export":
+        if len(args) < 2:
+            console.print("[red]Usage: finscope export TICKER [--output file.html][/red]")
+            return
+        cmd_export(args[1].upper(), output=parsed.output)
+        return
+
+    if first == "funds":
+        _print_banner()
+        fund_svc = FundAnalysisService()
+        _run_mutual_funds_menu(fund_svc)
+        return
+
+    # ── Ticker-based commands ─────────────────────────────────────────────
+    symbol = args[0].upper()
+    subcommand = args[1].lower() if len(args) > 1 else None
+
+    # -i flag → interactive mode for this ticker
+    if interactive:
+        _print_banner()
+        while True:
+            change = run_interactive(symbol)
+            if not change:
+                break
+            symbol = Prompt.ask("Enter a stock ticker").strip().upper()
+        return
+
+    # Direct subcommand dispatch
+    dispatch = {
+        None:             lambda: cmd_overview(symbol),
+        "overview":       lambda: cmd_overview(symbol),
+        "ratios":         lambda: cmd_ratios(symbol),
+        "price":          lambda: cmd_price(symbol, args[2] if len(args) > 2 else parsed.period),
+        "financials":     lambda: cmd_financials(symbol),
+        "balance-sheet":  lambda: cmd_balance_sheet(symbol),
+        "cashflow":       lambda: cmd_cashflow(symbol),
+        "news":           lambda: cmd_news(symbol),
+        "analysts":       lambda: cmd_analysts(symbol),
+        "holders":        lambda: cmd_holders(symbol),
+        "sec-financials": lambda: cmd_sec_financials(symbol, parsed.category),
+        "sec-filings":    lambda: cmd_sec_filings(symbol),
+        "insiders":       lambda: cmd_insiders(symbol),
+    }
+
+    handler = dispatch.get(subcommand)
+    if handler is None:
+        console.print(f"[red]Unknown command: {subcommand}[/red]")
+        console.print(f"[dim]Valid commands: {', '.join(sorted(_STOCK_SUBCOMMANDS))}[/dim]")
+        return
+
+    handler()
+
+
+def _print_banner() -> None:
+    console.print(Rule("🔭 Finscope", style="bold blue"))
+    console.print(
+        "[dim]Terminal-based financial research · Yahoo Finance · SEC EDGAR · MFAPI[/dim]\n"
+    )
 
 
 def main() -> None:
-    import argparse
+    parser = _build_parser()
+    parsed = parser.parse_args()
 
-    parser = argparse.ArgumentParser(
-        description="Finscope — terminal-based financial research tool."
-    )
-    parser.add_argument("symbol", nargs="?", help="Stock ticker symbol (e.g., AAPL, MSFT)")
-    args = parser.parse_args()
-
-    console.print(Rule("Finscope", style="bold blue"))
-    console.print(
-        "[dim]A terminal-based financial research tool powered by Yahoo Finance, SEC EDGAR, and Rich[/dim]\n"
-    )
-
-    while True:
-        if args.symbol:
-            symbol = args.symbol
-            args.symbol = None
-        else:
-            symbol = Prompt.ask("Enter a stock ticker (e.g., AAPL, TSLA, MSFT)")
-
-        if not symbol.strip():
-            console.print("[red]Please enter a valid ticker.[/red]")
-            continue
-
-        change_ticker = run_dashboard(symbol.strip().upper())
-        if not change_ticker:
-            break
+    try:
+        _dispatch(parsed)
+    except TickerNotFoundError as exc:
+        console.print(f"\n[red]✗ {exc}[/red]")
+        sys.exit(1)
+    except DataFetchError as exc:
+        console.print(f"\n[red]✗ {exc}[/red]")
+        sys.exit(1)
+    except FinScopeError as exc:
+        console.print(f"\n[red]✗ {exc}[/red]")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        console.print("\n[dim]Cancelled.[/dim]")
+        sys.exit(0)
 
 
 if __name__ == "__main__":

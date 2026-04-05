@@ -509,3 +509,136 @@ def export_to_html(info: dict, ratios: dict, price_df: pd.DataFrame, output_path
         f.write(html)
 
     console.print(f"\n[bold green]Report exported to {output_path}[/bold green]")
+
+
+# ──────────────────────────────────────────────────────────────
+# SEC EDGAR: Detailed Financials (XBRL)
+# ──────────────────────────────────────────────────────────────
+
+def render_detailed_financials(data: dict, category: str):
+    """Render detailed financials from SEC EDGAR XBRL data.
+
+    Args:
+        data: Output from sec_edgar.get_detailed_financials().
+        category: One of 'Income Statement', 'Balance Sheet', 'Cash Flow', 'Per Share & Other'.
+    """
+    cat_data = data.get(category)
+    if not cat_data:
+        console.print(f"[yellow]No {category} data available from SEC EDGAR.[/yellow]")
+        return
+
+    # Collect all unique fiscal years
+    all_years = set()
+    for concept_values in cat_data.values():
+        for entry in concept_values:
+            fy = entry.get("fy")
+            if fy:
+                all_years.add(fy)
+
+    years = sorted(all_years, reverse=True)[:6]  # Last 6 years
+
+    table = Table(
+        title=f"{category} (SEC EDGAR / 10-K Filings)",
+        box=box.ROUNDED,
+        border_style="magenta",
+    )
+    table.add_column("Item", style="bold", min_width=25)
+
+    for year in years:
+        table.add_column(f"FY {year}", justify="right", min_width=14)
+
+    for concept_name, values in cat_data.items():
+        # Build year -> value map (use the latest entry per fiscal year)
+        year_map = {}
+        for entry in values:
+            fy = entry.get("fy")
+            if fy in years:
+                year_map[fy] = entry.get("val")
+
+        row = [concept_name]
+        for year in years:
+            val = year_map.get(year)
+            if val is None:
+                row.append("[dim]—[/dim]")
+            elif isinstance(val, (int, float)):
+                if abs(val) >= 1_000_000_000:
+                    row.append(f"${val / 1_000_000_000:.2f}B")
+                elif abs(val) >= 1_000_000:
+                    row.append(f"${val / 1_000_000:.1f}M")
+                elif abs(val) < 100:
+                    row.append(f"{val:.2f}")
+                else:
+                    row.append(f"{val:,.0f}")
+            else:
+                row.append(str(val))
+
+        table.add_row(*row)
+
+    console.print(table)
+
+
+# ──────────────────────────────────────────────────────────────
+# SEC EDGAR: Recent Filings
+# ──────────────────────────────────────────────────────────────
+
+def render_sec_filings(filings: list[dict]):
+    """Render a table of recent SEC filings with links."""
+    if not filings:
+        console.print("[yellow]No filings data available.[/yellow]")
+        return
+
+    console.print(Rule("Recent SEC Filings", style="cyan"))
+
+    table = Table(box=box.SIMPLE_HEAVY, border_style="cyan")
+    table.add_column("Form", style="bold cyan", min_width=12)
+    table.add_column("Date", style="dim", min_width=12)
+    table.add_column("Description", min_width=30)
+    table.add_column("Link", style="blue", min_width=20)
+
+    # Highlight important filing types
+    highlight_forms = {"10-K", "10-Q", "8-K", "DEF 14A", "S-1"}
+
+    for filing in filings:
+        form = filing["form"]
+        style = "bold yellow" if form in highlight_forms else ""
+        desc = filing.get("description", "")[:50]
+        url = filing.get("url", "")
+
+        table.add_row(
+            f"[{style}]{form}[/{style}]" if style else form,
+            filing["date"],
+            desc,
+            f"[link={url}]View[/link]" if url else "",
+        )
+
+    console.print(table)
+
+
+# ──────────────────────────────────────────────────────────────
+# SEC EDGAR: Insider Transactions
+# ──────────────────────────────────────────────────────────────
+
+def render_insider_transactions(transactions: list[dict]):
+    """Render recent insider transactions (Form 3/4/5)."""
+    if not transactions:
+        console.print("[yellow]No insider transaction data available.[/yellow]")
+        return
+
+    console.print(Rule("Insider Transactions (Form 4)", style="yellow"))
+
+    table = Table(box=box.SIMPLE_HEAVY, border_style="yellow")
+    table.add_column("Form", style="bold", min_width=6)
+    table.add_column("Date", style="dim", min_width=12)
+    table.add_column("Description", min_width=40)
+    table.add_column("Link", style="blue")
+
+    for txn in transactions[:15]:
+        url = txn.get("url", "")
+        table.add_row(
+            txn["form"],
+            txn["date"],
+            txn.get("description", "Insider transaction")[:50],
+            f"[link={url}]View[/link]" if url else "",
+        )
+
+    console.print(table)

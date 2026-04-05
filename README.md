@@ -14,7 +14,10 @@ Type a ticker symbol and get instant access to:
 - **Company Overview** — Name, sector, industry, current price, business description, and a 3-month ASCII sparkline chart
 - **Key Financial Ratios** — P/E, PEG, Price/Book, ROE, Debt/Equity, margins, and 20+ other metrics
 - **Price History** — OHLCV data for any period (1 day to max), color-coded green/red, with an inline sparkline chart
-- **Income Statement / Balance Sheet / Cash Flow** — Annual financial statements in a formatted table
+- **Income Statement / Balance Sheet / Cash Flow** — Annual financial statements (Yahoo Finance)
+- **SEC EDGAR: Detailed Financials** — 500+ XBRL line items from actual 10-K filings with 6 years of history (Revenue, EPS, R&D, Long-term Debt, etc.)
+- **SEC EDGAR: Recent Filings** — Browse 10-K, 10-Q, 8-K, proxy statements with direct links
+- **SEC EDGAR: Insider Transactions** — Form 3/4/5 insider buy/sell filings
 - **Analyst Recommendations** — Buy/Sell/Hold ratings rendered as a color-coded bar chart
 - **Major Holders** — Top institutional holders (Vanguard, BlackRock, etc.) with share counts
 - **Stock Comparison** — Side-by-side ratio comparison of multiple tickers with trend sparklines
@@ -31,6 +34,13 @@ All data is pulled live from Yahoo Finance. No API keys required.
 Most stock dashboards require a browser, API keys, or paid subscriptions. I wanted something I could run directly in my terminal while working — no context switching, no distractions.
 
 The original version of this project was a Streamlit app that depended on deprecated libraries (`fbprophet`) and paid APIs (IEX Cloud, Alpha Vantage) with hardcoded keys. I rebuilt it from scratch as a terminal-first application using `rich` for rendering and `yfinance` for free, reliable data.
+
+### Data Sources
+
+| Source | What It Provides | API Key? |
+|--------|-----------------|----------|
+| [Yahoo Finance](https://finance.yahoo.com/) via `yfinance` | Price, ratios, news, analysts, holders | No |
+| [SEC EDGAR](https://www.sec.gov/edgar) | XBRL financials, 10-K/10-Q filings, insider trades | No |
 
 ---
 
@@ -74,6 +84,19 @@ The original version of this project was a Streamlit app that depended on deprec
 ╰────────────────┴──────────────┴──────────────┴──────────────╯
 ```
 
+### SEC EDGAR Detailed Financials (XBRL)
+```text
+               Income Statement (SEC EDGAR / 10-K Filings)
+╭────────────────────┬─────────────┬─────────────┬─────────────╮
+│ Item               │     FY 2025 │     FY 2024 │     FY 2023 │
+├────────────────────┼─────────────┼─────────────┼─────────────┤
+│ Revenue            │    $416.16B │    $391.04B │    $383.29B │
+│ Net Income         │    $112.01B │     $93.74B │     $97.00B │
+│ EPS (Diluted)      │       7.46  │       6.08  │       6.13  │
+│ R&D Expense        │     $34.55B │     $31.37B │     $29.91B │
+╰────────────────────┴─────────────┴─────────────┴─────────────╯
+```
+
 ---
 
 ## Project Structure
@@ -81,8 +104,9 @@ The original version of this project was a Streamlit app that depended on deprec
 ```text
 fundamental-dashboard/
 ├── src/dashboard/
-│   ├── cli.py          ← Interactive menu loop (13 options)
+│   ├── cli.py          ← Interactive menu loop (16 options)
 │   ├── data.py         ← Yahoo Finance data fetching
+│   ├── sec_edgar.py    ← SEC EDGAR API (XBRL facts, filings, insider trades)
 │   └── ui.py           ← Rich rendering (sparklines, tables, bars, panels, export)
 ├── pyproject.toml
 ├── .gitignore
@@ -119,16 +143,19 @@ dashboard AAPL
  [ 1] Company Overview
  [ 2] Key Ratios
  [ 3] Price History (with sparkline)
- [ 4] Income Statement
- [ 5] Balance Sheet
- [ 6] Cash Flow
+ [ 4] Income Statement (Yahoo)
+ [ 5] Balance Sheet (Yahoo)
+ [ 6] Cash Flow (Yahoo)
  [ 7] News
  [ 8] Analyst Recommendations
  [ 9] Major Holders
- [10] Compare Stocks
- [11] Watchlist
- [12] Export Report to HTML
- [13] Change Ticker
+ [10] SEC EDGAR: Detailed Financials (XBRL)
+ [11] SEC EDGAR: Recent Filings
+ [12] SEC EDGAR: Insider Transactions
+ [13] Compare Stocks
+ [14] Watchlist
+ [15] Export Report to HTML
+ [16] Change Ticker
  [ 0] Exit
 ```
 
@@ -136,7 +163,7 @@ dashboard AAPL
 
 ## Tech Stack
 
-- **Data Source**: [Yahoo Finance](https://finance.yahoo.com/) via `yfinance` (free, no API key)
+- **Data Sources**: [Yahoo Finance](https://finance.yahoo.com/) via `yfinance` + [SEC EDGAR](https://www.sec.gov/edgar) XBRL API
 - **Terminal UI**: [Rich](https://github.com/Textualize/rich) (tables, panels, sparklines, bar charts, HTML export)
 - **Package Management**: [uv](https://github.com/astral-sh/uv)
 

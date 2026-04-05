@@ -21,6 +21,11 @@ from dashboard.data import (
     get_major_holders,
     get_comparison_data,
 )
+from dashboard.sec_edgar import (
+    get_detailed_financials,
+    get_recent_filings,
+    get_insider_transactions,
+)
 from dashboard.ui import (
     render_header,
     render_description,
@@ -33,6 +38,9 @@ from dashboard.ui import (
     render_comparison,
     render_watchlist,
     export_to_html,
+    render_detailed_financials,
+    render_sec_filings,
+    render_insider_transactions,
 )
 
 console = Console()
@@ -41,16 +49,19 @@ MENU = {
     1: "Company Overview",
     2: "Key Ratios",
     3: "Price History (with sparkline)",
-    4: "Income Statement",
-    5: "Balance Sheet",
-    6: "Cash Flow",
+    4: "Income Statement (Yahoo)",
+    5: "Balance Sheet (Yahoo)",
+    6: "Cash Flow (Yahoo)",
     7: "News",
     8: "Analyst Recommendations",
     9: "Major Holders",
-    10: "Compare Stocks",
-    11: "Watchlist",
-    12: "Export Report to HTML",
-    13: "Change Ticker",
+    10: "SEC EDGAR: Detailed Financials (XBRL)",
+    11: "SEC EDGAR: Recent Filings",
+    12: "SEC EDGAR: Insider Transactions",
+    13: "Compare Stocks",
+    14: "Watchlist",
+    15: "Export Report to HTML",
+    16: "Change Ticker",
     0: "Exit",
 }
 
@@ -132,6 +143,35 @@ def run_dashboard(symbol: str):
             render_major_holders(breakdown, institutional)
 
         elif choice == 10:
+            console.print("Loading detailed financials from SEC EDGAR...")
+            edgar_data = get_detailed_financials(symbol)
+            if not edgar_data:
+                console.print("[red]No SEC EDGAR data found for this ticker.[/red]")
+                continue
+            sub = Prompt.ask(
+                "Category",
+                choices=["income", "balance", "cashflow", "pershare"],
+                default="income",
+            )
+            cat_map = {
+                "income": "Income Statement",
+                "balance": "Balance Sheet",
+                "cashflow": "Cash Flow",
+                "pershare": "Per Share & Other",
+            }
+            render_detailed_financials(edgar_data, cat_map[sub])
+
+        elif choice == 11:
+            console.print("Loading recent SEC filings...")
+            filings = get_recent_filings(symbol, count=20)
+            render_sec_filings(filings)
+
+        elif choice == 12:
+            console.print("Loading insider transactions...")
+            txns = get_insider_transactions(symbol)
+            render_insider_transactions(txns)
+
+        elif choice == 13:
             input_str = Prompt.ask(
                 "Enter tickers to compare (comma-separated, e.g., AAPL,MSFT,GOOGL)"
             )
@@ -147,7 +187,7 @@ def run_dashboard(symbol: str):
             comp_data = get_comparison_data(symbols)
             render_comparison(comp_data)
 
-        elif choice == 11:
+        elif choice == 14:
             input_str = Prompt.ask(
                 "Enter watchlist tickers (comma-separated, e.g., AAPL,TSLA,NVDA,MSFT,AMZN)"
             )
@@ -161,13 +201,13 @@ def run_dashboard(symbol: str):
             watch_data = get_comparison_data(symbols)
             render_watchlist(watch_data)
 
-        elif choice == 12:
+        elif choice == 15:
             filename = Prompt.ask("Output filename", default=f"{symbol.lower()}_report.html")
             ratios = get_key_ratios(info)
             price_df = get_price_history(ticker, period="1mo")
             export_to_html(info, ratios, price_df, output_path=filename)
 
-        elif choice == 13:
+        elif choice == 16:
             return True  # Signal to ask for a new ticker
 
         else:

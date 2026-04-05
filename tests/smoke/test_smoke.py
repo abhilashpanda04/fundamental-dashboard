@@ -62,18 +62,12 @@ class TestImports:
     def test_import_cli(self):
         import finscope.cli  # noqa: F401
 
-    # Backward-compat modules
-    def test_import_data(self):
-        import finscope.data  # noqa: F401
-
-    def test_import_sec_edgar_compat(self):
-        import finscope.sec_edgar  # noqa: F401
-
-    def test_import_mutual_funds_compat(self):
-        import finscope.mutual_funds  # noqa: F401
-
-    def test_import_ui_compat(self):
-        import finscope.ui  # noqa: F401
+    # Backward-compat modules (removed — these were shims)
+    # If you need the old imports, use the new paths:
+    #   finscope.data          → finscope.providers.yahoo_provider
+    #   finscope.sec_edgar     → finscope.providers.sec_edgar_provider
+    #   finscope.mutual_funds  → finscope.providers.mfapi_provider
+    #   finscope.ui (module)   → finscope.ui (package)
 
 
 # ── Top-level API smoke tests ─────────────────────────────────────────────────

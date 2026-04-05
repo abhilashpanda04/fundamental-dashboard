@@ -74,7 +74,7 @@ _STOCK_SUBCOMMANDS = {
     "ratios", "price", "financials", "balance-sheet", "cashflow",
     "news", "analysts", "holders", "sec-financials", "sec-filings",
     "insiders", "overview", "analyze", "ask", "summarize-filings",
-    "valuate",
+    "valuate", "risk",
 }
 
 _SEC_CAT_MAP = {
@@ -421,6 +421,152 @@ def _run_async(coro):
     return asyncio.run(coro)
 
 
+def cmd_risk(symbol: str, period: str = "1y") -> None:
+    """Full risk profile: volatility, drawdown, Sharpe, beta, fundamentals."""
+    console.print(f"\nComputing risk profile for [bold cyan]{symbol}[/bold cyan] ({period})...\n")
+    from finscope.risk import compute_risk
+    r = compute_risk(symbol, period=period)
+
+    # ── Composite ──────────────────────────────────────────────────────────
+    level_colors = {
+        "Low": "bold green", "Moderate": "yellow",
+        "High": "bold red", "Very High": "bold red on white",
+    }
+    lc = level_colors.get(r.risk_level, "white")
+    bar_len = int((r.risk_score or 0) / 5)
+    bar = "█" * bar_len + "░" * (20 - bar_len)
+
+    console.print(Rule(f"Risk Profile: {r.symbol}", style="bold magenta"))
+    console.print(f"  [{lc}]{bar} {r.risk_score:.0f}/100  {r.risk_level} Risk[/{lc}]\n")
+
+    if r.risk_factors:
+        console.print("[bold red]  ⚠ Risk Factors[/bold red]")
+        for f_ in r.risk_factors:
+            console.print(f"    [red]• {f_}[/red]")
+    if r.risk_positives:
+        console.print("\n[bold green]  ✓ Mitigating Factors[/bold green]")
+        for p in r.risk_positives:
+            console.print(f"    [green]• {p}[/green]")
+    console.print()
+
+    # ── Volatility ─────────────────────────────────────────────────────────
+    console.print(Rule("Volatility  [dim](src: price history — daily returns)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: How much the stock price fluctuates. "
+                  "Annual volatility < 15% = low risk. 15–25% = moderate. "
+                  "25–40% = high. > 40% = very high. "
+                  "Skewness < 0 = left tail (risk of sudden drops). "
+                  "High kurtosis = fat tails (extreme moves more likely than normal distribution predicts).[/dim]")
+    v = r.volatility
+    if v.annual_vol is not None:
+        vc = "green" if v.annual_vol < 0.20 else "yellow" if v.annual_vol < 0.35 else "red"
+        console.print(f"  Annual Volatility:   [{vc}]{v.annual_vol:.1%}[/{vc}]  ({v.interpretation})")
+        console.print(f"  Daily Volatility:    {v.daily_vol:.2%}" if v.daily_vol else "")
+        console.print(f"  30D Volatility:      {v.vol_30d:.1%}" if v.vol_30d else "")
+        console.print(f"  90D Volatility:      {v.vol_90d:.1%}" if v.vol_90d else "")
+        if v.skewness is not None:
+            sk_c = "red" if v.skewness < -0.5 else "green" if v.skewness > 0.5 else "dim"
+            console.print(f"  Skewness:            [{sk_c}]{v.skewness:.2f}[/{sk_c}]"
+                          f"  [dim]({'negative tail risk' if v.skewness < 0 else 'positive skew'})[/dim]")
+        if v.kurtosis is not None:
+            kc = "red" if v.kurtosis > 3 else "dim"
+            console.print(f"  Kurtosis:            [{kc}]{v.kurtosis:.2f}[/{kc}]"
+                          f"  [dim]({'fat tails — extreme moves likely' if v.kurtosis > 3 else 'normal tails'})[/dim]")
+    else:
+        console.print("  [dim]Insufficient price data[/dim]")
+
+    # ── Downside Risk ──────────────────────────────────────────────────────
+    console.print(Rule("Downside Risk  [dim](src: price history — worst-case scenarios)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: VaR 95% = the loss you won't exceed on 95% of trading days. "
+                  "CVaR = average loss on the worst 5% of days (expected shortfall). "
+                  "Max drawdown = the largest peak-to-trough decline ever recorded in the period. "
+                  "Current drawdown = how far the stock is from its 52-week high right now.[/dim]")
+    d = r.downside
+    if d.var_95 is not None:
+        vc = "red" if d.var_95 < -0.03 else "yellow"
+        console.print(f"  VaR 95%:             [{vc}]{d.var_95:.2%}[/{vc}]  [dim](daily loss not exceeded 95% of days)[/dim]")
+    if d.var_99 is not None:
+        console.print(f"  VaR 99%:             [red]{d.var_99:.2%}[/red]  [dim](daily loss not exceeded 99% of days)[/dim]")
+    if d.cvar_95 is not None:
+        console.print(f"  CVaR 95%:            [red]{d.cvar_95:.2%}[/red]  [dim](avg loss on worst 5% of days)[/dim]")
+    if d.max_drawdown is not None:
+        mdc = "green" if d.max_drawdown > -0.15 else "yellow" if d.max_drawdown > -0.30 else "red"
+        console.print(f"  Max Drawdown:        [{mdc}]{d.max_drawdown:.1%}[/{mdc}]", end="")
+        if d.drawdown_start and d.drawdown_end:
+            console.print(f"  [dim]({d.drawdown_start} → {d.drawdown_end})[/dim]", end="")
+        console.print()
+        if d.max_drawdown_duration:
+            console.print(f"  Recovery Duration:   {d.max_drawdown_duration} days")
+    if d.current_drawdown is not None:
+        cdc = "green" if d.current_drawdown > -0.10 else "yellow" if d.current_drawdown > -0.25 else "red"
+        console.print(f"  vs 52W High:         [{cdc}]{d.current_drawdown:.1%}[/{cdc}]  [dim](current drawdown)[/dim]")
+
+    # ── Risk-Adjusted Returns ──────────────────────────────────────────────
+    console.print(Rule("Risk-Adjusted Returns  [dim](src: price history vs risk-free rate 4%)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Sharpe ratio = excess return per unit of total volatility "
+                  "(> 1.0 is good, > 2.0 is excellent, < 0 means you weren't compensated for risk). "
+                  "Sortino only penalises downside volatility — better for asymmetric returns. "
+                  "Calmar = annual return ÷ max drawdown (higher is better).[/dim]")
+    ra = r.risk_adjusted
+    if ra.annual_return is not None:
+        arc = "green" if ra.annual_return > 0 else "red"
+        console.print(f"  Annual Return:       [{arc}]{ra.annual_return:+.1%}[/{arc}]  [dim](over {r.period} period)[/dim]")
+    if ra.sharpe_ratio is not None:
+        sc = "green" if ra.sharpe_ratio > 1 else "yellow" if ra.sharpe_ratio > 0 else "red"
+        console.print(f"  Sharpe Ratio:        [{sc}]{ra.sharpe_ratio:.2f}[/{sc}]  [dim]({ra.interpretation})[/dim]")
+    if ra.sortino_ratio is not None:
+        sc = "green" if ra.sortino_ratio > 1 else "yellow" if ra.sortino_ratio > 0 else "red"
+        console.print(f"  Sortino Ratio:       [{sc}]{ra.sortino_ratio:.2f}[/{sc}]")
+    if ra.calmar_ratio is not None:
+        cc = "green" if ra.calmar_ratio > 1 else "yellow" if ra.calmar_ratio > 0 else "red"
+        console.print(f"  Calmar Ratio:        [{cc}]{ra.calmar_ratio:.2f}[/{cc}]")
+
+    # ── Market Risk ────────────────────────────────────────────────────────
+    console.print(Rule("Market Risk  [dim](src: price history vs SPY)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Beta measures sensitivity to the S&P 500. "
+                  "Beta = 1.0 moves in line with the market. "
+                  "Beta > 1.5 amplifies market moves (higher risk and reward). "
+                  "Beta < 0.6 is defensive. Beta < 0 moves inversely. "
+                  "R-squared tells you how much of this stock's movement is explained by the market.[/dim]")
+    m = r.market
+    beta = m.beta or m.beta_calculated
+    if beta is not None:
+        bc = "green" if beta < 0.8 else "yellow" if beta < 1.3 else "red"
+        console.print(f"  Beta:                [{bc}]{beta:.2f}[/{bc}]  [dim]({m.interpretation})[/dim]")
+        if m.beta and m.beta_calculated:
+            console.print(f"  Beta (calculated):   {m.beta_calculated:.2f}  [dim](vs {m.beta:.2f} from data provider)[/dim]")
+    if m.correlation is not None:
+        console.print(f"  Correlation (SPY):   {m.correlation:.2f}")
+    if m.r_squared is not None:
+        console.print(f"  R-Squared (SPY):     {m.r_squared:.1%}  [dim](% of movement explained by market)[/dim]")
+
+    # ── Fundamental Risk ───────────────────────────────────────────────────
+    console.print(Rule("Fundamental Risk  [dim](src: Yahoo Finance — balance sheet)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Balance sheet health. "
+                  "Debt/Equity > 200% is high leverage. "
+                  "Current ratio < 1.0 means more short-term liabilities than assets. "
+                  "Interest coverage < 2× means earnings barely cover interest payments. "
+                  "Earnings quality: good when operating cash flow exceeds reported net income.[/dim]")
+    fu = r.fundamental
+    if fu.debt_to_equity is not None:
+        dc = "green" if fu.debt_to_equity < 80 else "yellow" if fu.debt_to_equity < 150 else "red"
+        console.print(f"  Debt / Equity:       [{dc}]{fu.debt_to_equity:.0f}%[/{dc}]")
+    if fu.current_ratio is not None:
+        crc = "green" if fu.current_ratio > 1.5 else "yellow" if fu.current_ratio > 1.0 else "red"
+        console.print(f"  Current Ratio:       [{crc}]{fu.current_ratio:.2f}[/{crc}]")
+    if fu.interest_coverage is not None:
+        icc = "green" if fu.interest_coverage > 5 else "yellow" if fu.interest_coverage > 2 else "red"
+        console.print(f"  Interest Coverage:   [{icc}]{fu.interest_coverage:.1f}×[/{icc}]")
+    if fu.altman_z is not None:
+        zc = {"Safe": "green", "Grey": "yellow", "Distress": "bold red"}.get(fu.altman_zone, "white")
+        console.print(f"  Altman Z-Score:      [{zc}]{fu.altman_z:.2f} ({fu.altman_zone})[/{zc}]")
+    if fu.earnings_quality != "N/A":
+        eqc = "green" if fu.earnings_quality == "Good" else "red"
+        console.print(f"  Earnings Quality:    [{eqc}]{fu.earnings_quality}[/{eqc}]  [dim](OCF vs Net Income)[/dim]")
+
+    render_attribution(f"Yahoo Finance · price history ({r.period})")
+    console.print()
+
+
 def cmd_analyze(symbol: str) -> None:
     """AI-powered comprehensive stock analysis."""
     _require_ai()
@@ -688,6 +834,22 @@ class ValuateCommand(DashboardCommand):
         cmd_valuate(ctx.symbol)
 
 
+
+class RiskCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        period = questionary.select(
+            "Look-back period:",
+            choices=[
+                questionary.Choice("6 months", "6mo"),
+                questionary.Choice("1 year (default)", "1y"),
+                questionary.Choice("2 years", "2y"),
+                questionary.Choice("5 years", "5y"),
+            ],
+            default="1y",
+        ).ask() or "1y"
+        cmd_risk(ctx.symbol, period)
+
+
 class ScreenCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         query = Prompt.ask(
@@ -879,15 +1041,16 @@ def _build_registry() -> CommandRegistry:
         .register(12, "SEC EDGAR: Insider Transactions",       InsiderTransactionsCommand())
         # ── Valuation & Screening ──────────────────────────────────────────
         .register(13, "Valuation Analysis (6 models)",         ValuateCommand())
-        .register(14, "Stock Screener (S&P 500)",              ScreenCommand())
+        .register(14, "Risk Profile (volatility, VaR, Sharpe)",  RiskCommand())
+        .register(15, "Stock Screener (S&P 500)",              ScreenCommand())
         # ── Comparison & Watchlist ─────────────────────────────────────────
-        .register(15, "Compare Stocks",                        CompareStocksCommand())
-        .register(16, "Watchlist",                             WatchlistCommand())
+        .register(16, "Compare Stocks",                        CompareStocksCommand())
+        .register(17, "Watchlist",                             WatchlistCommand())
         # ── AI ─────────────────────────────────────────────────────────────
         .register(17, "\U0001f9e0  AI Analysis →",              AIAnalysisCommand())
         # ── Utilities ──────────────────────────────────────────────────────
-        .register(18, "Export Report to HTML",                 ExportHtmlCommand())
-        .register(19, "Mutual Funds",                          MutualFundsCommand())
+        .register(19, "Export Report to HTML",                 ExportHtmlCommand())
+        .register(20, "Mutual Funds",                          MutualFundsCommand())
         .register(20, "Change Ticker",                         ChangeTickerCommand())
         .register(0,  "Exit",                                  None)
     )
@@ -920,16 +1083,17 @@ def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerC
         questionary.Choice("Insider Transactions",         12),
         questionary.Separator("─── Valuation & Screening ──────────────────"),
         questionary.Choice("Valuation Analysis (6 models)",13),
-        questionary.Choice("Stock Screener (S&P 500)",     14),
+        questionary.Choice("Risk Profile (vol, VaR, Sharpe, beta)", 14),
+        questionary.Choice("Stock Screener (S&P 500)",     15),
         questionary.Separator("─── Comparison ─────────────────────────────"),
-        questionary.Choice("Compare Stocks",               15),
-        questionary.Choice("Watchlist",                    16),
+        questionary.Choice("Compare Stocks",               16),
+        questionary.Choice("Watchlist",                    17),
         questionary.Separator("─── AI (requires API key) ──────────────────"),
-        questionary.Choice("\U0001f9e0  AI Analysis \u2192",    17),
+        questionary.Choice("\U0001f9e0  AI Analysis \u2192",    18),
         questionary.Separator("─── Utilities ──────────────────────────────"),
-        questionary.Choice("Export Report to HTML",        18),
-        questionary.Choice("Mutual Funds",                 19),
-        questionary.Choice("Change Ticker",                20),
+        questionary.Choice("Export Report to HTML",        19),
+        questionary.Choice("Mutual Funds",                 20),
+        questionary.Choice("Change Ticker",                21),
         questionary.Separator(),
         questionary.Choice("Exit",                         0),
     ]
@@ -1150,6 +1314,7 @@ examples:
   finscope AAPL sec-filings         Recent SEC filings
   finscope AAPL insiders            Insider transactions
   finscope AAPL valuate              Valuation analysis (6 models)
+  finscope AAPL risk                 Risk profile (volatility, VaR, Sharpe, beta)
   finscope compare AAPL MSFT GOOGL  Side-by-side comparison
   finscope watchlist AAPL TSLA NVDA Compact watchlist
   finscope screen "pe < 15"         Screen S&P 500 stocks
@@ -1300,6 +1465,7 @@ def _dispatch(parsed: argparse.Namespace) -> None:
         "sec-filings":    lambda: cmd_sec_filings(symbol),
         "insiders":          lambda: cmd_insiders(symbol),
         "valuate":           lambda: cmd_valuate(symbol),
+        "risk":              lambda: cmd_risk(symbol, args[2] if len(args) > 2 else parsed.period),
         "analyze":           lambda: cmd_analyze(symbol),
         "ask":               lambda: cmd_ask(symbol, " ".join(args[2:]) if len(args) > 2 else ""),
         "summarize-filings": lambda: cmd_summarize_filings(symbol),

@@ -221,6 +221,30 @@ class Stock:
         from finscope.valuation import valuate
         return valuate(self._symbol)
 
+    def risk(self, period: str = "1y") -> "StockRisk":
+        """Compute a comprehensive risk profile — pure financial math, no AI needed.
+
+        Computes volatility, VaR/CVaR, max drawdown, Sharpe/Sortino/Calmar,
+        beta vs S&P 500, and fundamental balance-sheet risk.
+
+        Args:
+            period: Look-back window for price history (default ``"1y"``).
+
+        Returns:
+            A :class:`~finscope.risk.models.StockRisk`.
+
+        Example::
+
+            r = aapl.risk()
+            r.risk_level                  # "Moderate"
+            r.volatility.annual_vol       # 0.24
+            r.downside.max_drawdown       # -0.31
+            r.risk_adjusted.sharpe_ratio  # 1.12
+            r.market.beta                 # 1.24
+        """
+        from finscope.risk import compute_risk
+        return compute_risk(self._symbol, period=period, stock=self)
+
     async def analyze(self) -> "StockAnalysis":
         """Run a comprehensive AI analysis of this stock.
 

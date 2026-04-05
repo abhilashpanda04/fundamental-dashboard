@@ -1,15 +1,31 @@
-"""Custom exceptions for the Fundamental Dashboard.
+"""Custom exceptions for finscope.
 
-Provides a clear, typed exception hierarchy so callers can handle
-specific failures without catching bare Exception.
+All exceptions inherit from ``FinScopeError`` so callers can catch the
+entire hierarchy with a single ``except FinScopeError`` clause, or be
+selective by catching a specific subclass.
 """
 
+from __future__ import annotations
 
-class DashboardError(Exception):
-    """Base exception for every error raised by this application."""
+__all__ = [
+    "FinScopeError",
+    "TickerNotFoundError",
+    "DataFetchError",
+    "CIKNotFoundError",
+    "FundNotFoundError",
+    "InvalidPeriodError",
+]
 
 
-class TickerNotFoundError(DashboardError):
+class FinScopeError(Exception):
+    """Base exception for every error raised by finscope."""
+
+
+# Backward-compatible alias so any code that caught the old name still works.
+DashboardError = FinScopeError
+
+
+class TickerNotFoundError(FinScopeError):
     """Raised when a ticker symbol cannot be resolved by a provider."""
 
     def __init__(self, symbol: str) -> None:
@@ -17,7 +33,7 @@ class TickerNotFoundError(DashboardError):
         super().__init__(f"Ticker not found: '{symbol}'")
 
 
-class DataFetchError(DashboardError):
+class DataFetchError(FinScopeError):
     """Raised when a provider fails to retrieve data (network / API error)."""
 
     def __init__(self, provider: str, reason: str) -> None:
@@ -26,7 +42,7 @@ class DataFetchError(DashboardError):
         super().__init__(f"[{provider}] Data fetch failed: {reason}")
 
 
-class CIKNotFoundError(DashboardError):
+class CIKNotFoundError(FinScopeError):
     """Raised when the SEC CIK number cannot be resolved for a ticker."""
 
     def __init__(self, symbol: str) -> None:
@@ -34,7 +50,7 @@ class CIKNotFoundError(DashboardError):
         super().__init__(f"SEC CIK not found for ticker: '{symbol}'")
 
 
-class FundNotFoundError(DashboardError):
+class FundNotFoundError(FinScopeError):
     """Raised when a mutual fund cannot be found by scheme code or name."""
 
     def __init__(self, identifier: str) -> None:
@@ -42,7 +58,7 @@ class FundNotFoundError(DashboardError):
         super().__init__(f"Fund not found: '{identifier}'")
 
 
-class InvalidPeriodError(DashboardError):
+class InvalidPeriodError(FinScopeError):
     """Raised when an unsupported time period string is supplied."""
 
     VALID_PERIODS = ("1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max")

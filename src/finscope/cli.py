@@ -1,6 +1,6 @@
 """CLI entry point — Command Pattern.
 
-Each menu option is a discrete ``DashboardCommand`` object with a single
+Each menu option is a discrete ``Command`` object with a single
 ``execute(ctx)`` method.  A ``CommandRegistry`` maps integer keys to command
 instances.  The main loop just dispatches to the registry — it never
 contains business logic itself.
@@ -8,6 +8,10 @@ contains business logic itself.
 This eliminates the giant if/elif chain and makes each feature independently
 testable and extendable without modifying existing code (Open/Closed
 Principle).
+
+The CLI is just **one consumer** of the ``finscope`` library.  All data
+access goes through the same :class:`finscope.Stock` class that end-users
+import in their own scripts.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from __future__ import annotations
 import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.prompt import IntPrompt, Prompt
@@ -22,6 +27,7 @@ from rich.rule import Rule
 
 from finscope.exceptions import DataFetchError, TickerNotFoundError
 from finscope.services import FundAnalysisService, StockAnalysisService
+from finscope.stock import Stock
 from finscope.ui import (
     export_to_html,
     make_sparkline,
@@ -53,24 +59,35 @@ console = Console()
 
 @dataclass
 class DashboardContext:
-    """Shared mutable state passed to every command during a dashboard session."""
+    """Shared state passed to every command during a CLI session.
 
-    symbol: str
-    info: dict
-    sparkline: list[float]
-    stock_service: StockAnalysisService
+    Wraps a :class:`finscope.Stock` object — the same class library users
+    get when they call ``finscope.stock("AAPL")``.
+    """
+
+    stock: Stock
     fund_service: FundAnalysisService
+
+    # ── Convenience aliases ──────────────────────────────────────────────────
+
+    @property
+    def symbol(self) -> str:
+        return self.stock.symbol
+
+    @property
+    def info(self) -> dict:
+        return self.stock.info
+
+    @property
+    def sparkline(self) -> list[float]:
+        return self.stock.sparkline
 
 
 # ── Command base class ────────────────────────────────────────────────────────
 
 
 class DashboardCommand(ABC):
-    """Abstract base for dashboard menu commands (Command Pattern).
-
-    Each subclass encapsulates one menu action.  Commands declare what they
-    need through the ``DashboardContext`` passed to ``execute``.
-    """
+    """Abstract base for menu commands (Command Pattern)."""
 
     @abstractmethod
     def execute(self, ctx: DashboardContext) -> None:
@@ -95,7 +112,7 @@ class KeyRatiosCommand(DashboardCommand):
     """Show key financial ratios."""
 
     def execute(self, ctx: DashboardContext) -> None:
-        ratios = ctx.stock_service.get_key_ratios(ctx.info).to_display_dict()
+        ratios = ctx.stock.ratios.to_display_dict()
         render_ratios(ratios)
 
 
@@ -108,44 +125,39 @@ class PriceHistoryCommand(DashboardCommand):
             choices=["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "max"],
             default="1mo",
         )
-        df = ctx.stock_service.get_price_history(ctx.symbol, period=period)
-        sparkline = ctx.stock_service.get_sparkline(ctx.symbol, period=period)
+        df = ctx.stock.price_history(period)
+        sparkline = ctx.stock._service.get_sparkline(ctx.symbol, period=period)
         render_price_history(df, period, sparkline)
 
 
 class IncomeStatementCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
-        df = ctx.stock_service.get_financials(ctx.symbol)
-        render_financials(df, "Income Statement")
+        render_financials(ctx.stock.financials, "Income Statement")
 
 
 class BalanceSheetCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
-        df = ctx.stock_service.get_balance_sheet(ctx.symbol)
-        render_financials(df, "Balance Sheet")
+        render_financials(ctx.stock.balance_sheet, "Balance Sheet")
 
 
 class CashFlowCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
-        df = ctx.stock_service.get_cashflow(ctx.symbol)
-        render_financials(df, "Cash Flow Statement")
+        render_financials(ctx.stock.cashflow, "Cash Flow Statement")
 
 
 class NewsCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
-        news = ctx.stock_service.get_news(ctx.symbol)
-        render_news(news)
+        render_news(ctx.stock.news)
 
 
 class AnalystRecsCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
-        recs = ctx.stock_service.get_analyst_recommendations(ctx.symbol)
-        render_analyst_recommendations(recs)
+        render_analyst_recommendations(ctx.stock.analyst_recommendations)
 
 
 class MajorHoldersCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
-        breakdown, institutional = ctx.stock_service.get_major_holders(ctx.symbol)
+        breakdown, institutional = ctx.stock.holders
         render_major_holders(breakdown, institutional)
 
 
@@ -162,7 +174,7 @@ class SecDetailedFinancialsCommand(DashboardCommand):
 
     def execute(self, ctx: DashboardContext) -> None:
         console.print("Loading detailed financials from SEC EDGAR...")
-        edgar_data = ctx.stock_service.get_detailed_financials(ctx.symbol)
+        edgar_data = ctx.stock.sec_financials
         if not edgar_data:
             console.print("[red]No SEC EDGAR data found for this ticker.[/red]")
             return
@@ -177,15 +189,14 @@ class SecDetailedFinancialsCommand(DashboardCommand):
 class SecFilingsCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         console.print("Loading recent SEC filings...")
-        filings = ctx.stock_service.get_recent_filings(ctx.symbol, count=20)
+        filings = ctx.stock.sec_filings(count=20)
         render_sec_filings(filings)
 
 
 class InsiderTransactionsCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         console.print("Loading insider transactions...")
-        txns = ctx.stock_service.get_insider_transactions(ctx.symbol)
-        render_insider_transactions(txns)
+        render_insider_transactions(ctx.stock.insider_transactions)
 
 
 class CompareStocksCommand(DashboardCommand):
@@ -194,14 +205,13 @@ class CompareStocksCommand(DashboardCommand):
             "Enter tickers to compare (comma-separated, e.g., AAPL,MSFT,GOOGL)"
         )
         symbols = [s.strip().upper() for s in input_str.split(",") if s.strip()]
-        if ctx.symbol.upper() not in symbols:
-            symbols.insert(0, ctx.symbol.upper())
+        if ctx.symbol not in symbols:
+            symbols.insert(0, ctx.symbol)
         if len(symbols) < 2:
             console.print("[red]Please enter at least 2 tickers.[/red]")
             return
         console.print(f"Loading comparison data for {', '.join(symbols)}...")
-        comp_data = ctx.stock_service.get_comparison_data(symbols)
-        # Pass as dicts for the renderer (backward-compat with dict-based render_comparison)
+        comp_data = ctx.stock.compare_with(*symbols[1:])
         render_comparison([vars(d) for d in comp_data])
 
 
@@ -215,7 +225,8 @@ class WatchlistCommand(DashboardCommand):
             console.print("[red]Please enter at least 1 ticker.[/red]")
             return
         console.print(f"Loading watchlist for {', '.join(symbols)}...")
-        watch_data = ctx.stock_service.get_comparison_data(symbols)
+        import finscope
+        watch_data = finscope.compare(*symbols)
         render_watchlist([vars(d) for d in watch_data])
 
 
@@ -224,13 +235,8 @@ class ExportHtmlCommand(DashboardCommand):
         filename = Prompt.ask(
             "Output filename", default=f"{ctx.symbol.lower()}_report.html"
         )
-        export_data = ctx.stock_service.build_export_data(ctx.symbol)
-        export_to_html(
-            export_data["info"],
-            export_data["ratios"],
-            export_data["price_history"],
-            output_path=filename,
-        )
+        path = ctx.stock.export_html(filename)
+        console.print(f"\n[bold green]Report exported to {path}[/bold green]")
 
 
 class MutualFundsCommand(DashboardCommand):
@@ -256,11 +262,7 @@ class ChangeTickerCommand(DashboardCommand):
 
 
 class CommandRegistry:
-    """Maps integer menu keys to (label, DashboardCommand) pairs.
-
-    Using a registry avoids any ``if/elif`` chains and makes it trivial to
-    add new menu options without modifying existing code.
-    """
+    """Maps integer menu keys to (label, DashboardCommand) pairs."""
 
     def __init__(self) -> None:
         self._commands: dict[int, tuple[str, DashboardCommand | None]] = {}
@@ -284,7 +286,7 @@ class CommandRegistry:
 
 
 def _build_registry() -> CommandRegistry:
-    """Construct and return the main dashboard command registry."""
+    """Construct and return the main command registry."""
     return (
         CommandRegistry()
         .register(1,  "Company Overview",                     OverviewCommand())
@@ -371,13 +373,12 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
                 continue
             sym = sym.strip().upper()
             console.print(f"Loading data for {sym}...")
-            fund_info = fund_service.get_global_fund_info(sym)
-            if not fund_info:
+            import finscope
+            f = finscope.fund(sym)
+            if not f.info:
                 console.print(f"[red]Could not find fund: {sym}[/red]")
                 continue
-            returns = fund_service.get_global_fund_returns(sym)
-            spark = fund_service.get_global_fund_sparkline(sym, "1y")
-            render_global_fund_detail(sym, fund_info, returns, spark)
+            render_global_fund_detail(sym, f.info, f.returns, f.sparkline)
 
         else:
             console.print("[red]Invalid option.[/red]")
@@ -435,7 +436,7 @@ def _show_india_fund(fund_service: FundAnalysisService, scheme_code: str) -> Non
         console.print(f"  1Y NAV Trend: {make_sparkline(spark_vals, width=60)}")
 
 
-# ── Main dashboard loop ───────────────────────────────────────────────────────
+# ── Main loop ─────────────────────────────────────────────────────────────────
 
 
 def run_dashboard(
@@ -443,10 +444,9 @@ def run_dashboard(
     stock_service: StockAnalysisService | None = None,
     fund_service: FundAnalysisService | None = None,
 ) -> bool:
-    """Run the interactive dashboard for *symbol*.
+    """Run the interactive CLI for *symbol*.
 
-    Returns:
-        ``True`` when the user selects "Change Ticker", ``False`` on exit.
+    Returns ``True`` when the user selects "Change Ticker", ``False`` on exit.
     """
     _stock_svc = stock_service or StockAnalysisService()
     _fund_svc = fund_service or FundAnalysisService()
@@ -454,7 +454,8 @@ def run_dashboard(
     console.print(f"\nLoading data for [bold cyan]{symbol.upper()}[/bold cyan]...\n")
 
     try:
-        info = _stock_svc.get_info(symbol)
+        s = Stock(symbol, service=_stock_svc)
+        _ = s.info  # Trigger the initial fetch — validates the ticker
     except TickerNotFoundError:
         console.print(f"[red]Could not find ticker: {symbol}[/red]")
         return False
@@ -462,16 +463,9 @@ def run_dashboard(
         console.print(f"[red]{exc}[/red]")
         return False
 
-    sparkline = _stock_svc.get_sparkline(symbol, period="3mo")
-    render_header(info, sparkline)
+    render_header(s.info, s.sparkline)
 
-    ctx = DashboardContext(
-        symbol=symbol.upper(),
-        info=info,
-        sparkline=sparkline,
-        stock_service=_stock_svc,
-        fund_service=_fund_svc,
-    )
+    ctx = DashboardContext(stock=s, fund_service=_fund_svc)
 
     while True:
         _show_menu()
@@ -488,7 +482,7 @@ def run_dashboard(
             continue
 
         if isinstance(command, ChangeTickerCommand):
-            return True  # Signal to ask for a new ticker
+            return True
 
         if command is not None:
             try:
@@ -511,9 +505,9 @@ def main() -> None:
     parser.add_argument("symbol", nargs="?", help="Stock ticker symbol (e.g., AAPL, MSFT)")
     args = parser.parse_args()
 
-    console.print(Rule("Fundamental Dashboard", style="bold blue"))
+    console.print(Rule("Finscope", style="bold blue"))
     console.print(
-        "[dim]Finscope — a terminal-based financial research tool powered by Yahoo Finance, SEC EDGAR, and Rich[/dim]\n"
+        "[dim]A terminal-based financial research tool powered by Yahoo Finance, SEC EDGAR, and Rich[/dim]\n"
     )
 
     while True:

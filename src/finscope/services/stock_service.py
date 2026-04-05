@@ -11,6 +11,8 @@ import logging
 
 import pandas as pd
 
+__all__ = ["StockAnalysisService"]
+
 from finscope.exceptions import DataFetchError, TickerNotFoundError
 from finscope.models import ComparisonData, KeyRatios
 from finscope.providers.sec_edgar_provider import SecEdgarProvider

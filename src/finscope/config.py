@@ -13,6 +13,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
+__all__ = ["Config", "config"]
+
 
 @dataclass
 class Config:

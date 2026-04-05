@@ -27,6 +27,8 @@ from typing import Any
 from rich import box as rich_box
 from rich.table import Table
 
+__all__ = ["TableBuilder", "financial_table", "comparison_table", "simple_table"]
+
 
 @dataclass
 class _ColumnSpec:

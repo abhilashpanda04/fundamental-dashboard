@@ -14,6 +14,8 @@ import pandas as pd
 import requests
 import yfinance as yf
 
+__all__ = ["MfapiProvider", "POPULAR_FUNDS"]
+
 from finscope.config import config
 from finscope.exceptions import DataFetchError, FundNotFoundError
 from finscope.providers.base import MutualFundProvider

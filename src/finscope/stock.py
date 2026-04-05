@@ -1,0 +1,290 @@
+"""High-level ``Stock`` and ``Fund`` classes — the primary library entry points.
+
+These classes wrap the service layer behind a clean, ergonomic API built for
+interactive use (REPL, Jupyter notebooks) as well as scripting.
+
+All data properties are **lazily fetched and cached** on first access using
+``functools.cached_property``.  Nothing hits the network until you ask for it.
+
+Example::
+
+    import finscope
+
+    # ── Stocks ────────────────────────────────────────────────────────────────
+    aapl = finscope.stock("AAPL")
+
+    aapl.info                        # raw Yahoo Finance dict
+    aapl.ratios.pe_ratio             # 28.5
+    aapl.ratios.market_cap           # 2_700_000_000_000
+    aapl.price_history("1y")         # OHLCV DataFrame
+    aapl.sparkline                   # [100.0, 105.0, …]
+    aapl.news                        # list of article dicts
+    aapl.financials                  # income statement DataFrame
+    aapl.balance_sheet
+    aapl.cashflow
+    aapl.analyst_recommendations
+    aapl.holders
+    aapl.sec_financials              # XBRL data from SEC EDGAR
+    aapl.sec_filings(count=10)
+    aapl.insider_transactions
+    aapl.compare_with("MSFT", "GOOGL")  # list[ComparisonData]
+    aapl.export_html("report.html")
+
+    # ── Global ETFs / Funds ───────────────────────────────────────────────────
+    vwrl = finscope.fund("VWRL.L")
+    vwrl.info
+    vwrl.returns
+    vwrl.sparkline
+"""
+
+from __future__ import annotations
+
+from functools import cached_property
+from typing import TYPE_CHECKING
+
+import pandas as pd
+
+from finscope.models import ComparisonData, KeyRatios
+
+if TYPE_CHECKING:
+    from finscope.services.fund_service import FundAnalysisService
+    from finscope.services.stock_service import StockAnalysisService
+
+
+__all__ = ["Stock", "Fund"]
+
+
+# ── Stock ─────────────────────────────────────────────────────────────────────
+
+
+class Stock:
+    """A single equity — the primary finscope library entry point.
+
+    Instantiate via :func:`finscope.stock` rather than directly::
+
+        import finscope
+        aapl = finscope.stock("AAPL")
+
+    Args:
+        symbol:  Ticker symbol (case-insensitive; stored as upper-case).
+        service: Optional pre-configured ``StockAnalysisService``.  A
+                 default instance is created when not supplied.
+    """
+
+    def __init__(self, symbol: str, service: "StockAnalysisService | None" = None) -> None:
+        from finscope.services.stock_service import StockAnalysisService
+
+        self._symbol: str = symbol.upper()
+        self._service: StockAnalysisService = service or StockAnalysisService()
+
+    # ── Identity ──────────────────────────────────────────────────────────────
+
+    @property
+    def symbol(self) -> str:
+        """Upper-cased ticker symbol."""
+        return self._symbol
+
+    # ── Lazy data properties ──────────────────────────────────────────────────
+
+    @cached_property
+    def info(self) -> dict:
+        """Raw metadata dict from Yahoo Finance.
+
+        Raises:
+            TickerNotFoundError: if the symbol is not recognised.
+            DataFetchError: on network failures.
+        """
+        return self._service.get_info(self._symbol)
+
+    @cached_property
+    def ratios(self) -> KeyRatios:
+        """Key financial ratios derived from :attr:`info`."""
+        return self._service.get_key_ratios(self.info)
+
+    @cached_property
+    def sparkline(self) -> list[float]:
+        """3-month closing-price series (oldest → newest) for trend charts."""
+        return self._service.get_sparkline(self._symbol, period="3mo")
+
+    def price_history(self, period: str = "1mo") -> pd.DataFrame:
+        """OHLCV price history DataFrame.
+
+        Args:
+            period: Any yfinance period string: ``1d``, ``5d``, ``1mo``,
+                    ``3mo``, ``6mo``, ``1y``, ``2y``, ``5y``, ``ytd``, ``max``.
+        """
+        return self._service.get_price_history(self._symbol, period)
+
+    @cached_property
+    def news(self) -> list[dict]:
+        """Recent news article dicts."""
+        return self._service.get_news(self._symbol)
+
+    @cached_property
+    def financials(self) -> pd.DataFrame:
+        """Annual income statement as a DataFrame."""
+        return self._service.get_financials(self._symbol)
+
+    @cached_property
+    def balance_sheet(self) -> pd.DataFrame:
+        """Annual balance sheet as a DataFrame."""
+        return self._service.get_balance_sheet(self._symbol)
+
+    @cached_property
+    def cashflow(self) -> pd.DataFrame:
+        """Annual cash flow statement as a DataFrame."""
+        return self._service.get_cashflow(self._symbol)
+
+    @cached_property
+    def analyst_recommendations(self) -> pd.DataFrame | None:
+        """Analyst buy / sell / hold recommendation counts, or ``None``."""
+        return self._service.get_analyst_recommendations(self._symbol)
+
+    @cached_property
+    def holders(self) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
+        """``(breakdown, institutional_holders)`` DataFrames."""
+        return self._service.get_major_holders(self._symbol)
+
+    @cached_property
+    def sec_financials(self) -> dict:
+        """Detailed XBRL financials from SEC EDGAR, organised by category."""
+        return self._service.get_detailed_financials(self._symbol)
+
+    def sec_filings(self, count: int = 20) -> list[dict]:
+        """Recent SEC filings (10-K, 10-Q, 8-K, …).
+
+        Args:
+            count: Maximum number of filings to return.
+        """
+        return self._service.get_recent_filings(self._symbol, count=count)
+
+    @cached_property
+    def insider_transactions(self) -> list[dict]:
+        """Form 3 / 4 / 5 insider transaction filings."""
+        return self._service.get_insider_transactions(self._symbol)
+
+    # ── Multi-stock operations ────────────────────────────────────────────────
+
+    def compare_with(self, *symbols: str) -> list[ComparisonData]:
+        """Return side-by-side comparison data for this stock and *symbols*.
+
+        Example::
+
+            aapl.compare_with("MSFT", "GOOGL")
+        """
+        all_symbols = [self._symbol] + [s.upper() for s in symbols]
+        return self._service.get_comparison_data(all_symbols)
+
+    # ── Export ────────────────────────────────────────────────────────────────
+
+    def export_html(self, path: str | None = None) -> str:
+        """Export a fundamental report to an HTML file.
+
+        Args:
+            path: Output file path.  Defaults to ``<symbol>_report.html``.
+
+        Returns:
+            The resolved output path.
+        """
+        from finscope.ui import export_to_html
+
+        output_path = path or f"{self._symbol.lower()}_report.html"
+        data = self._service.build_export_data(self._symbol)
+        export_to_html(
+            data["info"],
+            data["ratios"],
+            data["price_history"],
+            output_path=output_path,
+        )
+        return output_path
+
+    # ── Dunder helpers ────────────────────────────────────────────────────────
+
+    def __repr__(self) -> str:
+        try:
+            price = self.info.get("currentPrice") or self.info.get("regularMarketPrice", "?")
+            name = self.info.get("shortName", self._symbol)
+            currency = self.info.get("currency", "USD")
+            return f"Stock('{self._symbol}' | {name} | {currency} {price})"
+        except Exception:
+            return f"Stock('{self._symbol}')"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Stock):
+            return self._symbol == other._symbol
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self._symbol)
+
+
+# ── Fund ──────────────────────────────────────────────────────────────────────
+
+
+class Fund:
+    """A global ETF or mutual fund — fetched via Yahoo Finance.
+
+    Instantiate via :func:`finscope.fund`::
+
+        import finscope
+        vwrl = finscope.fund("VWRL.L")
+        vwrl.info
+        vwrl.returns
+        vwrl.sparkline
+
+    Args:
+        symbol:  Yahoo Finance ticker (e.g. ``"VWRL.L"``, ``"INDA"``, ``"AGG"``).
+        service: Optional pre-configured ``FundAnalysisService``.
+    """
+
+    def __init__(self, symbol: str, service: "FundAnalysisService | None" = None) -> None:
+        from finscope.services.fund_service import FundAnalysisService
+
+        self._symbol: str = symbol.upper()
+        self._service: FundAnalysisService = service or FundAnalysisService()
+
+    # ── Identity ──────────────────────────────────────────────────────────────
+
+    @property
+    def symbol(self) -> str:
+        return self._symbol
+
+    # ── Lazy data properties ──────────────────────────────────────────────────
+
+    @cached_property
+    def info(self) -> dict | None:
+        """Raw Yahoo Finance info dict, or ``None`` if not found."""
+        return self._service.get_global_fund_info(self._symbol)
+
+    @cached_property
+    def returns(self) -> dict:
+        """Calculated historical returns keyed by period label."""
+        return self._service.get_global_fund_returns(self._symbol)
+
+    @cached_property
+    def sparkline(self) -> list[float]:
+        """1-year closing-price series for trend charts."""
+        return self._service.get_global_fund_sparkline(self._symbol, period="1y")
+
+    # ── Dunder helpers ────────────────────────────────────────────────────────
+
+    def __repr__(self) -> str:
+        try:
+            name = (self.info or {}).get("shortName", self._symbol)
+            return f"Fund('{self._symbol}' | {name})"
+        except Exception:
+            return f"Fund('{self._symbol}')"
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, Fund):
+            return self._symbol == other._symbol
+        return NotImplemented
+
+    def __hash__(self) -> int:
+        return hash(self._symbol)

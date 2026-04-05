@@ -9,6 +9,15 @@ from __future__ import annotations
 
 from finscope.config import config
 
+__all__ = [
+    "make_sparkline",
+    "format_number",
+    "format_pct",
+    "format_currency",
+    "format_return",
+    "safe_float",
+]
+
 # ── Sparkline ─────────────────────────────────────────────────────────────────
 
 _SPARK_CHARS = "▁▂▃▄▅▆▇█"

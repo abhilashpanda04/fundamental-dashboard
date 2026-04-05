@@ -12,6 +12,8 @@ import logging
 import pandas as pd
 import yfinance as yf
 
+__all__ = ["YahooFinanceProvider"]
+
 from finscope.exceptions import DataFetchError, TickerNotFoundError
 from finscope.providers.base import StockDataProvider
 

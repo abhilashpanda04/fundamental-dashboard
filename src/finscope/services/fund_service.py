@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 
+__all__ = ["FundAnalysisService"]
+
 from finscope.exceptions import FundNotFoundError
 from finscope.providers.mfapi_provider import MfapiProvider
 

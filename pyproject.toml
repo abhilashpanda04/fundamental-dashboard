@@ -1,15 +1,34 @@
 [project]
 name = "finscope"
 version = "1.0.0"
-description = "Finscope — a terminal-based financial research tool powered by Yahoo Finance, SEC EDGAR, and Rich."
+description = "Finscope — a terminal-based financial research library powered by Yahoo Finance, SEC EDGAR, and Rich."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+keywords = ["finance", "stocks", "etf", "mutual-funds", "sec-edgar", "yahoo-finance", "terminal", "cli", "rich"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Financial and Insurance Industry",
+    "Intended Audience :: Developers",
+    "Topic :: Office/Business :: Financial :: Investment",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+]
 dependencies = [
     "yfinance>=0.2.30",
     "pandas>=2.0",
     "rich>=13.0",
     "requests>=2.28",
 ]
+
+[project.urls]
+Homepage = "https://github.com/abhilashpanda04/fundamental-dashboard"
+Repository = "https://github.com/abhilashpanda04/fundamental-dashboard"
+Issues = "https://github.com/abhilashpanda04/fundamental-dashboard/issues"
 
 [project.scripts]
 finscope = "finscope.cli:main"
@@ -48,10 +67,3 @@ omit = ["*/__pycache__/*", "*/tests/*"]
 [tool.coverage.report]
 show_missing = true
 skip_covered  = false
-
-[dependency-groups]
-dev = [
-    "pytest>=9.0.2",
-    "pytest-cov>=7.1.0",
-    "pytest-mock>=3.15.1",
-]

@@ -17,6 +17,9 @@ import pytest
 class TestImports:
     """Every module must be importable without errors."""
 
+    def test_import_top_level(self):
+        import finscope  # noqa: F401
+
     def test_import_exceptions(self):
         import finscope.exceptions  # noqa: F401
 
@@ -25,6 +28,9 @@ class TestImports:
 
     def test_import_models(self):
         import finscope.models  # noqa: F401
+
+    def test_import_stock(self):
+        import finscope.stock  # noqa: F401
 
     def test_import_providers_base(self):
         import finscope.providers.base  # noqa: F401
@@ -70,6 +76,38 @@ class TestImports:
         import finscope.ui  # noqa: F401
 
 
+# ── Top-level API smoke tests ─────────────────────────────────────────────────
+
+class TestTopLevelApiSmoke:
+    def test_version_is_string(self):
+        import finscope
+        assert isinstance(finscope.__version__, str)
+
+    def test_stock_factory_returns_stock(self):
+        import finscope
+        s = finscope.stock("AAPL")
+        assert isinstance(s, finscope.Stock)
+        assert s.symbol == "AAPL"
+
+    def test_fund_factory_returns_fund(self):
+        import finscope
+        f = finscope.fund("VWRL.L")
+        assert isinstance(f, finscope.Fund)
+        assert f.symbol == "VWRL.L"
+
+    def test_stock_is_lazy(self):
+        """No network call should be made on construction."""
+        import finscope
+        mock_svc = MagicMock()
+        s = finscope.Stock("AAPL", service=mock_svc)
+        mock_svc.get_info.assert_not_called()
+
+    def test_all_exports_resolvable(self):
+        import finscope
+        for name in finscope.__all__:
+            assert hasattr(finscope, name), f"__all__ declares '{name}' but it's missing"
+
+
 # ── Config smoke tests ────────────────────────────────────────────────────────
 
 class TestConfigSmoke:
@@ -86,7 +124,7 @@ class TestConfigSmoke:
     def test_sec_user_agent_is_string(self):
         from finscope.config import config
         assert isinstance(config.sec_user_agent, str)
-        assert len(config.sec_user_agent) > 0
+        assert "Finscope" in config.sec_user_agent
 
     def test_sec_headers_dict(self):
         from finscope.config import config
@@ -98,10 +136,14 @@ class TestConfigSmoke:
 # ── Exception smoke tests ─────────────────────────────────────────────────────
 
 class TestExceptionsSmoke:
-    def test_dashboard_error_is_base(self):
-        from finscope.exceptions import DashboardError
-        e = DashboardError("test")
+    def test_finscope_error_is_base(self):
+        from finscope.exceptions import FinScopeError
+        e = FinScopeError("test")
         assert isinstance(e, Exception)
+
+    def test_backward_compat_alias(self):
+        from finscope.exceptions import DashboardError, FinScopeError
+        assert DashboardError is FinScopeError
 
     def test_ticker_not_found_message(self):
         from finscope.exceptions import TickerNotFoundError
@@ -124,11 +166,11 @@ class TestExceptionsSmoke:
         e = FundNotFoundError("BADCODE")
         assert "BADCODE" in str(e)
 
-    def test_all_exceptions_inherit_dashboard_error(self):
+    def test_all_exceptions_inherit_finscope_error(self):
         from finscope.exceptions import (
             CIKNotFoundError,
-            DashboardError,
             DataFetchError,
+            FinScopeError,
             FundNotFoundError,
             InvalidPeriodError,
             TickerNotFoundError,
@@ -140,7 +182,7 @@ class TestExceptionsSmoke:
             FundNotFoundError,
             InvalidPeriodError,
         ]:
-            assert issubclass(cls, DashboardError)
+            assert issubclass(cls, FinScopeError)
 
 
 # ── Model construction smoke tests ────────────────────────────────────────────
@@ -177,7 +219,7 @@ class TestProviderConstruction:
         assert p is not None
 
 
-# ── Service construction smoke tests ─────────────────────────────────────────
+# ── Service construction smoke tests ──────────────────────────────────────────
 
 class TestServiceConstruction:
     def test_stock_service_instantiates_with_defaults(self):
@@ -227,12 +269,10 @@ class TestCliSmoke:
     def test_command_registry_has_17_numbered_options(self):
         from finscope.cli import _build_registry
         reg = _build_registry()
-        # Options 0..17 should all be registered
         for key in range(18):
             assert reg.label(key) != "", f"Key {key} not registered"
 
     def test_all_commands_are_concrete(self):
-        """Every registered command (except exit) must be a DashboardCommand instance."""
         from finscope.cli import DashboardCommand, _build_registry
         reg = _build_registry()
         for key, label in reg.items():

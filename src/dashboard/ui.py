@@ -651,3 +651,230 @@ def render_insider_transactions(transactions: list[dict]):
         )
 
     console.print(table)
+
+
+# ──────────────────────────────────────────────────────────────
+# Mutual Funds
+# ──────────────────────────────────────────────────────────────
+
+def _fmt_return(val) -> str:
+    """Format a return percentage with color."""
+    if val is None:
+        return "[dim]N/A[/dim]"
+    try:
+        v = float(val) * 100 if abs(float(val)) < 1 and float(val) != 0 else float(val)
+        color = "green" if v >= 0 else "red"
+        return f"[{color}]{v:+.2f}%[/{color}]"
+    except Exception:
+        return "[dim]N/A[/dim]"
+
+
+def _fmt_currency(val, currency: str = "") -> str:
+    """Format a currency value with B/M suffix."""
+    if val is None:
+        return "[dim]N/A[/dim]"
+    try:
+        v = float(val)
+        prefix = f"{currency} " if currency else ""
+        if abs(v) >= 1_000_000_000:
+            return f"{prefix}{v / 1_000_000_000:.2f}B"
+        if abs(v) >= 1_000_000:
+            return f"{prefix}{v / 1_000_000:.2f}M"
+        if abs(v) >= 1_000:
+            return f"{prefix}{v / 1_000:.2f}K"
+        return f"{prefix}{v:.4f}"
+    except Exception:
+        return str(val)
+
+
+def render_india_fund_overview(meta: dict, returns: dict, nav_data: list[dict]):
+    """Render a detailed overview of an Indian mutual fund."""
+    name = meta.get("scheme_name", "Unknown")
+    fund_house = meta.get("fund_house", "N/A")
+    category = meta.get("scheme_category", "N/A")
+    scheme_type = meta.get("scheme_type", "N/A")
+    isin = meta.get("isin_growth", "N/A")
+
+    current_nav = float(nav_data[0]["nav"]) if nav_data else 0
+    nav_date = nav_data[0]["date"] if nav_data else "N/A"
+
+    # Header panel
+    header = Text()
+    header.append(f"{name}\n", style="bold white")
+    header.append(f"Fund House: {fund_house}\n", style="yellow")
+    header.append(f"Category:   {category}\n", style="italic cyan")
+    header.append(f"Type:       {scheme_type}\n", style="dim")
+    header.append(f"ISIN:       {isin}\n", style="dim")
+    header.append(f"\nLatest NAV: ", style="bold")
+    header.append(f"₹{current_nav:.4f}", style="bold green")
+    header.append(f"  (as of {nav_date})", style="dim")
+
+    console.print(Panel(header, title="Indian Mutual Fund", border_style="green"))
+
+
+def render_fund_returns(returns: dict, title: str = "Returns", currency_symbol: str = ""):
+    """Render fund returns for multiple periods as a color-coded table."""
+    if not returns:
+        console.print("[yellow]No return data available.[/yellow]")
+        return
+
+    table = Table(title=title, box=box.ROUNDED, border_style="green")
+    table.add_column("Period", style="bold", min_width=10)
+    table.add_column("Return", justify="right", min_width=12)
+    table.add_column("Start NAV", justify="right", min_width=14)
+    table.add_column("Current NAV", justify="right", min_width=14)
+    table.add_column("Start Date", style="dim", min_width=14)
+
+    for period, data in returns.items():
+        if not isinstance(data, dict):
+            continue
+        pct = data.get("return_pct")
+        color = "green" if pct and pct >= 0 else "red"
+        start_nav = data.get("start_nav")
+        current_nav = data.get("current_nav")
+        start_date = data.get("start_date", "N/A")
+
+        pct_str = f"[{color}]{pct:+.2f}%[/{color}]" if pct is not None else "[dim]N/A[/dim]"
+        start_nav_str = f"{currency_symbol}₹{start_nav:.4f}" if start_nav else "N/A"
+        cur_nav_str = f"{currency_symbol}₹{current_nav:.4f}" if current_nav else "N/A"
+
+        table.add_row(period, pct_str, start_nav_str, cur_nav_str, start_date)
+
+    console.print(table)
+
+
+def render_india_fund_search_results(results: list[dict]):
+    """Render Indian mutual fund search results."""
+    if not results:
+        console.print("[yellow]No funds found matching your search.[/yellow]")
+        return
+
+    table = Table(title="Search Results", box=box.ROUNDED, border_style="green")
+    table.add_column("#", style="dim", min_width=4)
+    table.add_column("Scheme Code", style="bold cyan", min_width=12)
+    table.add_column("Fund Name", min_width=55)
+
+    for i, fund in enumerate(results[:20], 1):
+        table.add_row(
+            str(i),
+            str(fund["schemeCode"]),
+            fund["schemeName"],
+        )
+
+    console.print(table)
+
+
+def render_global_fund_snapshot(data: list[dict], region: str):
+    """Render a snapshot table of global mutual funds / ETFs."""
+    if not data:
+        console.print("[yellow]No fund data available.[/yellow]")
+        return
+
+    table = Table(
+        title=f"{region} Funds / ETFs",
+        box=box.HEAVY_EDGE,
+        border_style="blue",
+    )
+    table.add_column("Symbol", style="bold cyan", min_width=10)
+    table.add_column("Name", min_width=30)
+    table.add_column("NAV / Price", justify="right", min_width=12)
+    table.add_column("Day Chg", justify="right", min_width=10)
+    table.add_column("AUM", justify="right", min_width=12)
+    table.add_column("Expense", justify="right", min_width=10)
+    table.add_column("YTD", justify="right", min_width=10)
+    table.add_column("1Y Trend", min_width=22)
+
+    for fund in data:
+        nav = fund.get("nav")
+        currency = fund.get("currency", "")
+        nav_str = _fmt_currency(nav, currency) if nav else "[dim]N/A[/dim]"
+
+        expense = fund.get("expense_ratio")
+        expense_str = f"{float(expense)*100:.2f}%" if expense else "[dim]N/A[/dim]"
+
+        ytd = fund.get("ytd_return")
+        ytd_str = _fmt_return(ytd)
+
+        change = fund.get("change_pct")
+        # yfinance regularMarketChangePercent is already a percentage (e.g. 1.5 = 1.5%)
+        if change is not None:
+            change_as_fraction = change / 100
+        else:
+            change_as_fraction = None
+        change_str = _fmt_return(change_as_fraction)
+
+        aum = fund.get("total_assets")
+        aum_str = _fmt_currency(aum)
+
+        spark = _make_sparkline(fund.get("sparkline", []), width=18)
+
+        table.add_row(
+            fund["symbol"],
+            (fund.get("description") or fund.get("name", ""))[:30],
+            nav_str,
+            change_str,
+            aum_str,
+            expense_str,
+            ytd_str,
+            spark,
+        )
+
+    console.print(table)
+
+
+def render_global_fund_detail(symbol: str, info: dict, returns: dict, sparkline: list[float]):
+    """Render a detailed view of a global mutual fund or ETF."""
+    name = info.get("longName") or info.get("shortName") or symbol
+    currency = info.get("currency", "USD")
+    nav = info.get("navPrice") or info.get("currentPrice") or info.get("previousClose")
+    change = info.get("regularMarketChangePercent", 0)
+    fund_family = info.get("fundFamily") or info.get("issuer", "N/A")
+    category = info.get("category") or info.get("fundInceptionDate", "N/A")
+    total_assets = info.get("totalAssets")
+    expense = info.get("annualReportExpenseRatio")
+    beta = info.get("beta3Year") or info.get("beta")
+    morningstar = info.get("morningStarOverallRating")
+    inception = info.get("fundInceptionDate")
+
+    color = "green" if isinstance(change, (int, float)) and change >= 0 else "red"
+
+    header = Text()
+    header.append(f"{name}\n", style="bold white")
+    header.append(f"Symbol: {symbol}  |  Fund Family: {fund_family}\n", style="dim")
+    if category and category != "N/A":
+        header.append(f"Category: {category}\n", style="italic cyan")
+    header.append(f"\n{currency} {nav}  ", style=f"bold {color}")
+    header.append(f"[{color}]{change:+.2f}%[/{color}]" if isinstance(change, (int, float)) else "")
+
+    meta_parts = []
+    if total_assets:
+        meta_parts.append(f"AUM: {_fmt_currency(total_assets)}")
+    if expense:
+        meta_parts.append(f"Expense: {float(expense)*100:.4f}%")
+    if beta:
+        meta_parts.append(f"Beta(3Y): {beta:.2f}")
+    if morningstar:
+        meta_parts.append(f"Morningstar: {'★' * int(morningstar)}")
+    if inception:
+        meta_parts.append(f"Inception: {inception}")
+
+    if meta_parts:
+        header.append(f"\n{' | '.join(meta_parts)}", style="dim")
+
+    if sparkline:
+        console.print(Panel(header, title=f"Fund Overview — {symbol}", border_style="blue"))
+        console.print(f"  1Y Trend: {_make_sparkline(sparkline, width=60)}\n")
+    else:
+        console.print(Panel(header, title=f"Fund Overview — {symbol}", border_style="blue"))
+
+    # Returns table
+    if returns:
+        ret_table = Table(title="Returns", box=box.ROUNDED, border_style="green")
+        ret_table.add_column("Period", style="bold", min_width=12)
+        ret_table.add_column("Return", justify="right", min_width=12)
+
+        for period, val in returns.items():
+            if val is not None:
+                ret_table.add_row(period, _fmt_return(val / 100 if abs(float(val)) > 1 else val))
+
+        console.print(ret_table)

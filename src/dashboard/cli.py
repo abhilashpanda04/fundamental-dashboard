@@ -26,6 +26,17 @@ from dashboard.sec_edgar import (
     get_recent_filings,
     get_insider_transactions,
 )
+from dashboard.mutual_funds import (
+    search_india_funds,
+    get_india_fund_detail,
+    calculate_india_fund_returns,
+    get_india_fund_nav_series,
+    get_global_fund_info,
+    get_global_fund_returns,
+    get_global_fund_sparkline,
+    get_popular_funds_snapshot,
+    POPULAR_FUNDS,
+)
 from dashboard.ui import (
     render_header,
     render_description,
@@ -41,6 +52,12 @@ from dashboard.ui import (
     render_detailed_financials,
     render_sec_filings,
     render_insider_transactions,
+    render_india_fund_overview,
+    render_fund_returns,
+    render_india_fund_search_results,
+    render_global_fund_snapshot,
+    render_global_fund_detail,
+    _make_sparkline,
 )
 
 console = Console()
@@ -61,7 +78,8 @@ MENU = {
     13: "Compare Stocks",
     14: "Watchlist",
     15: "Export Report to HTML",
-    16: "Change Ticker",
+    16: "Mutual Funds",
+    17: "Change Ticker",
     0: "Exit",
 }
 
@@ -76,6 +94,125 @@ def show_menu():
         else:
             console.print(f"  [cyan][{key:>2}][/cyan] {label}")
     console.print()
+
+
+MF_MENU = {
+    1: "India — Search & Explore (MFAPI.in)",
+    2: "US Mutual Funds Snapshot",
+    3: "Global ETF Snapshot (LSE)",
+    4: "Asia Pacific ETF Snapshot",
+    5: "European ETF Snapshot",
+    6: "Fixed Income / Bond ETF Snapshot",
+    7: "Lookup Any Fund / ETF by Ticker",
+    0: "Back",
+}
+
+
+def run_mutual_funds_menu():
+    """Mutual funds sub-menu."""
+    while True:
+        console.print()
+        console.print(Rule("Mutual Funds", style="bold green"))
+        for key, label in MF_MENU.items():
+            style = "red" if key == 0 else "cyan"
+            console.print(f"  [{style}][{key}][/{style}] {label}")
+        console.print()
+
+        choice = IntPrompt.ask("Select", default=0)
+
+        if choice == 0:
+            return
+
+        elif choice == 1:
+            _india_fund_flow()
+
+        elif choice in (2, 3, 4, 5, 6):
+            region_map = {
+                2: "US",
+                3: "Global ETF (LSE)",
+                4: "Asia Pacific ETF",
+                5: "European ETF",
+                6: "Fixed Income / Bond ETF",
+            }
+            region = region_map[choice]
+            console.print(f"\nLoading {region} funds...")
+            data = get_popular_funds_snapshot(region)
+            render_global_fund_snapshot(data, region)
+
+        elif choice == 7:
+            sym = Prompt.ask("Enter fund/ETF ticker (e.g., VWRL.L, INDA, AGG)")
+            if not sym.strip():
+                continue
+            sym = sym.strip().upper()
+            console.print(f"Loading data for {sym}...")
+            fund_info = get_global_fund_info(sym)
+            if not fund_info:
+                console.print(f"[red]Could not find fund: {sym}[/red]")
+                continue
+            returns = get_global_fund_returns(sym)
+            spark = get_global_fund_sparkline(sym, "1y")
+            render_global_fund_detail(sym, fund_info, returns, spark)
+
+        else:
+            console.print("[red]Invalid option.[/red]")
+
+
+def _india_fund_flow():
+    """Interactive flow for searching and exploring Indian mutual funds."""
+    while True:
+        console.print()
+        console.print(Rule("Indian Mutual Funds  (MFAPI.in — 37,500+ funds)", style="green"))
+        console.print("  [cyan][1][/cyan] Search by name")
+        console.print("  [cyan][2][/cyan] Look up by scheme code")
+        console.print("  [red][0][/red] Back")
+        console.print()
+
+        sub = IntPrompt.ask("Select", default=0)
+
+        if sub == 0:
+            return
+
+        elif sub == 1:
+            query = Prompt.ask("Search (e.g., SBI Small Cap, Parag Parikh, HDFC Mid)")
+            if not query.strip():
+                continue
+            results = search_india_funds(query.strip())
+            render_india_fund_search_results(results)
+            if not results:
+                continue
+
+            code = Prompt.ask("Enter scheme code to view details (or press Enter to skip)", default="")
+            if code.strip():
+                _show_india_fund(code.strip())
+
+        elif sub == 2:
+            code = Prompt.ask("Enter scheme code (e.g., 125497)")
+            if code.strip():
+                _show_india_fund(code.strip())
+
+
+def _show_india_fund(scheme_code: str):
+    """Fetch and display details for an Indian mutual fund."""
+    console.print(f"\nLoading scheme {scheme_code}...")
+    detail = get_india_fund_detail(scheme_code)
+
+    if not detail:
+        console.print(f"[red]Could not fetch fund {scheme_code}.[/red]")
+        return
+
+    meta = detail.get("meta", {})
+    nav_data = detail.get("data", [])
+
+    render_india_fund_overview(meta, {}, nav_data)
+
+    # Calculate returns
+    returns = calculate_india_fund_returns(nav_data)
+    render_fund_returns(returns, title="Point-to-Point Returns")
+
+    # Sparkline
+    spark_vals = get_india_fund_nav_series(nav_data, days=365)
+    if spark_vals:
+        console.print(f"  1Y NAV Trend: {_make_sparkline(spark_vals, width=60)}")
 
 
 def run_dashboard(symbol: str):
@@ -211,6 +348,9 @@ def run_dashboard(symbol: str):
             export_to_html(info, ratios, price_df, output_path=filename)
 
         elif choice == 16:
+            run_mutual_funds_menu()
+
+        elif choice == 17:
             return True  # Signal to ask for a new ticker
 
         else:

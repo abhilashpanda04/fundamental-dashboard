@@ -919,7 +919,7 @@ def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerC
             ("pointer",     "fg:cyan bold"),
             ("highlighted", "fg:cyan bold"),
             ("selected",    "fg:green"),
-            ("separator",   "fg:dark_orange"),
+            ("separator",   "fg:#ff8700"),
         ]),
         instruction="(Use arrow keys to move, Enter to select)",
     ).ask()

@@ -764,3 +764,8 @@ def render_global_fund_detail(
             if val is not None:
                 ret_builder.row(period, format_return(val / 100 if abs(float(val)) > 1 else val))
         console.print(ret_builder.build())
+
+
+def render_attribution(source: str) -> None:
+    """Render a data source attribution footer."""
+    console.print(f"\n[dim italic]Data source: {source}[/dim italic]\n")

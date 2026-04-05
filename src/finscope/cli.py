@@ -28,8 +28,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from rich.console import Console
+from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.rule import Rule
+from rich.text import Text
 import questionary
 
 import finscope as fs
@@ -38,6 +40,7 @@ from finscope.services import FundAnalysisService
 from finscope.stock import Stock
 from finscope.ui import (
     export_to_html,
+    format_number,
     make_sparkline,
     render_analyst_recommendations,
     render_comparison,
@@ -437,7 +440,8 @@ def cmd_risk(symbol: str, period: str = "1y") -> None:
     bar = "█" * bar_len + "░" * (20 - bar_len)
 
     console.print(Rule(f"Risk Profile: {r.symbol}", style="bold magenta"))
-    console.print(f"  [{lc}]{bar} {r.risk_score:.0f}/100  {r.risk_level} Risk[/{lc}]\n")
+    score_str = f"{r.risk_score:.0f}/100" if r.risk_score is not None else "N/A"
+    console.print(f"  [{lc}]{bar} {score_str}  {r.risk_level} Risk[/{lc}]\n")
 
     if r.risk_factors:
         console.print("[bold red]  ⚠ Risk Factors[/bold red]")
@@ -935,7 +939,8 @@ def _render_fund_risk(r: "FundRisk") -> None:
     bar = "█" * int((r.risk_score or 0) / 5) + "░" * (20 - int((r.risk_score or 0) / 5))
 
     console.print(Rule(f"Fund Risk: {r.name}", style="bold magenta"))
-    console.print(f"  [{lc}]{bar} {r.risk_score:.0f}/100  {r.risk_level} Risk[/{lc}]\n")
+    score_str = f"{r.risk_score:.0f}/100" if r.risk_score is not None else "N/A"
+    console.print(f"  [{lc}]{bar} {score_str}  {r.risk_level} Risk[/{lc}]\n")
 
     if r.risk_factors:
         console.print("[bold red]  ⚠ Risk Factors[/bold red]")
@@ -1650,45 +1655,80 @@ _REGISTRY = _build_registry()
 
 
 def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerCommand:
-    """Show the interactive menu using questionary (arrow keys + enter)."""
+    """Show the interactive menu using questionary with a polished dashboard header."""
+    from rich.columns import Columns
+    
+    # Get some quick stats for the header
+    info = ctx.stock.info
+    price = info.get("currentPrice") or info.get("regularMarketPrice", 0)
+    change = info.get("regularMarketChangePercent", 0)
+    color = "green" if change >= 0 else "red"
+    
+    # Header components
+    col1 = Text.assemble(
+        (f"{info.get('longName', ctx.stock.symbol)}\n", "bold cyan"),
+        (f"{info.get('sector', 'N/A')} | {info.get('industry', 'N/A')}", "dim")
+    )
+    col2 = Text.assemble(
+        (f"{info.get('currency', 'USD')} {price:.2f}\n", f"bold {color}"),
+        (f"{change:+.2f}%", color), (" (Daily Change)", "dim")
+    )
+    col3 = Text.assemble(
+        (f"Mkt Cap: {format_number(info.get('marketCap'))}\n", "bold blue"),
+        (f"P/E Ratio: {info.get('trailingPE', 'N/A')}", "bold yellow")
+    )
+
     console.print()
+    console.print(Panel(
+        Columns([col1, col2, col3], equal=True, expand=True),
+        border_style="bright_blue",
+        title="[bold magenta] \u25c8 finscope dashboard \u25c8 [/bold magenta]",
+        title_align="center",
+        padding=(1, 2)
+    ))
 
     # Build choices with group separators
     choices: list = [
-        questionary.Separator("─── Overview ───────────────────────────────"),
-        questionary.Choice("Company Overview",             1),
-        questionary.Choice("Key Ratios",                   2),
-        questionary.Choice("Price History (with sparkline)",3),
-        questionary.Separator("─── Financials ─────────────────────────────"),
-        questionary.Choice("Income Statement",             4),
-        questionary.Choice("Balance Sheet",                5),
-        questionary.Choice("Cash Flow Statement",          6),
-        questionary.Separator("─── Market Data ────────────────────────────"),
-        questionary.Choice("News",                         7),
-        questionary.Choice("Analyst Recommendations",      8),
-        questionary.Choice("Major Holders",                9),
-        questionary.Separator("─── SEC EDGAR ──────────────────────────────"),
-        questionary.Choice("Detailed Financials (XBRL)",   10),
-        questionary.Choice("Recent Filings",               11),
-        questionary.Choice("Insider Transactions",         12),
-        questionary.Separator("─── Valuation & Screening ──────────────────"),
-        questionary.Choice("Valuation Analysis (6 models)",13),
-        questionary.Choice("Risk Profile (vol, VaR, Sharpe, beta)", 14),
-        questionary.Choice("Dividend Analysis",             15),
-        questionary.Choice("Earnings Analysis",             16),
-        questionary.Choice("Peer Comparison (auto-discover)", 17),
-        questionary.Choice("Stock Screener (S&P 500)",     18),
-        questionary.Separator("─── Comparison ─────────────────────────────"),
-        questionary.Choice("Compare Stocks",               19),
-        questionary.Choice("Watchlist",                    20),
-        questionary.Separator("─── AI (requires API key) ──────────────────"),
-        questionary.Choice("\U0001f9e0  AI Analysis \u2192",    21),
-        questionary.Separator("─── Utilities ──────────────────────────────"),
-        questionary.Choice("Export Report to HTML",        22),
-        questionary.Choice("Mutual Funds",                 23),
-        questionary.Choice("Change Ticker",                24),
-        questionary.Separator(),
-        questionary.Choice("Exit",                         0),
+        questionary.Separator(" \u2501\u2501\u2501 Fundamentals \u2501\u2501\u2501"),
+        questionary.Choice("  \u25b8 Company Overview",             1),
+        questionary.Choice("  \u25b8 Key Ratios",                   2),
+        questionary.Choice("  \u25b8 Price History & Trend",        3),
+        
+        questionary.Separator(" \u2501\u2501\u2501 Financial Statements \u2501\u2501\u2501"),
+        questionary.Choice("  \u25b8 Income Statement",             4),
+        questionary.Choice("  \u25b8 Balance Sheet",                5),
+        questionary.Choice("  \u25b8 Cash Flow Statement",          6),
+        
+        questionary.Separator(" \u2501\u2501\u2501 Market & Qualitative \u2501\u2501\u2501"),
+        questionary.Choice("  \u25b8 News & Sentiment",             7),
+        questionary.Choice("  \u25b8 Analyst Recommendations",      8),
+        questionary.Choice("  \u25b8 Major Holders",                9),
+        
+        questionary.Separator(" \u2501\u2501\u2501 SEC EDGAR (Direct) \u2501\u2501\u2501"),
+        questionary.Choice("  \u25b8 Detailed XBRL Financials",    10),
+        questionary.Choice("  \u25b8 Recent Filings",               11),
+        questionary.Choice("  \u25b8 Insider Transactions",         12),
+        
+        questionary.Separator(" \u2501\u2501\u2501 Advanced Analysis \u2501\u2501\u2501"),
+        questionary.Choice("  \u25b8 Valuation (Composite Verdict)", 13),
+        questionary.Choice("  \u25b8 Risk Profile (Sharpe, VaR)",   14),
+        questionary.Choice("  \u25b8 Dividend Analysis & DRIP",     15),
+        questionary.Choice("  \u25b8 Earnings Surprise History",    16),
+        questionary.Choice("  \u25b8 Peer Multiples Comparison",    17),
+        
+        questionary.Separator(" \u2501\u2501\u2501 Discovery & Tracker \u2501\u2501\u2501"),
+        questionary.Choice("  \u25b8 Stock Screener (S&P 500)",     18),
+        questionary.Choice("  \u25b8 Side-by-Side Comparison",      19),
+        questionary.Choice("  \u25b8 Global Watchlist",             20),
+        questionary.Choice("  \u2728 AI Deep Analysis \u2192",      21),
+        
+        questionary.Separator(" \u2501\u2501\u2501 System \u2501\u2501\u2501"),
+        questionary.Choice("  \u25b8 Export Report to HTML",        22),
+        questionary.Choice("  \u25b8 Mutual Funds & ETFs Explorer", 23),
+        questionary.Choice("  \u21ba Change Ticker",                24),
+        
+        questionary.Separator("\u2501" * 40),
+        questionary.Choice("  \u2715 Exit",                         0),
     ]
 
     choice_key = questionary.select(
@@ -1698,10 +1738,10 @@ def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerC
             ("qmark",       "fg:cyan bold"),
             ("question",    "bold"),
             ("answer",      "fg:green bold"),
-            ("pointer",     "fg:cyan bold"),
-            ("highlighted", "fg:cyan bold"),
-            ("selected",    "fg:green"),
-            ("separator",   "fg:#ff8700"),
+            ("pointer",     "fg:bright_cyan bold"),
+            ("highlighted", "fg:bright_cyan bold"),
+            ("selected",    "fg:bright_green"),
+            ("separator",   "fg:#666666 italic"),
         ]),
         instruction="(Use arrow keys to move, Enter to select)",
     ).ask()
@@ -1714,17 +1754,7 @@ def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerC
 
 # ── Mutual Funds sub-menu ─────────────────────────────────────────────────────
 
-_MF_MENU = {
-    1: "India — Search & Explore (MFAPI.in)",
-    2: "US Mutual Funds Snapshot",
-    3: "Global ETF Snapshot (LSE)",
-    4: "Asia Pacific ETF Snapshot",
-    5: "European ETF Snapshot",
-    6: "Fixed Income / Bond ETF Snapshot",
-    7: "Lookup Any Fund / ETF by Ticker",
-    0: "Back",
-}
-
+# Region map for curated fund lists
 _REGION_MAP = {
     2: "US",
     3: "Global ETF (LSE)",
@@ -1737,17 +1767,42 @@ _REGION_MAP = {
 def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
     while True:
         console.print()
+        console.print(Panel(
+            "[bold cyan]Mutual Fund & ETF Explorer[/bold cyan]\n"
+            "[dim]Browse curated popular lists or search directly via Yahoo Finance / MFAPI[/dim]",
+            border_style="bright_blue",
+            title="[bold magenta] \u25c8 finscope funds \u25c8 [/bold magenta]",
+            title_align="center",
+            padding=(1, 2)
+        ))
         
-        choices = []
-        for key, label in _MF_MENU.items():
-            if key == 0:
-                choices.append(questionary.Separator())
-            choices.append(questionary.Choice(title=label, value=key))
+        choices = [
+            questionary.Separator(" \u2501\u2501\u2501 Indian Funds \u2501\u2501\u2501"),
+            questionary.Choice("  \u25b8 Indian Mutual Funds (MFAPI.in)", 1),
+            
+            questionary.Separator(" \u2501\u2501\u2501 Global Curated (Yahoo Finance) \u2501\u2501\u2501"),
+            questionary.Choice("  \u25b8 Popular US Funds", 2),
+            questionary.Choice("  \u25b8 Global ETFs (LSE)", 3),
+            questionary.Choice("  \u25b8 Asia Pacific ETFs", 4),
+            questionary.Choice("  \u25b8 European ETFs", 5),
+            questionary.Choice("  \u25b8 Fixed Income / Bond ETFs", 6),
+            
+            questionary.Separator(" \u2501\u2501\u2501 Search \u2501\u2501\u2501"),
+            questionary.Choice("  \u25b8 Search by Ticker (e.g., AGG, VWRL.L, INDA)", 7),
+            
+            questionary.Separator("\u2501" * 40),
+            questionary.Choice("  \u25c0 Back to Main Menu", 0),
+        ]
             
         choice = questionary.select(
-            "Select Mutual Funds category:",
+            "Select a category:",
             choices=choices,
-            style=questionary.Style([('pointer', 'fg:green bold'), ('highlighted', 'fg:green bold')]),
+            style=questionary.Style([
+                ('pointer', 'fg:bright_cyan bold'),
+                ('highlighted', 'fg:bright_cyan bold'),
+                ('selected', 'fg:bright_green'),
+                ('separator', 'fg:#666666 italic'),
+            ]),
             instruction="(Use arrow keys to move, Enter to select)"
         ).ask()
 
@@ -1780,11 +1835,17 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
             deeper = questionary.select(
                 "Deep dive:",
                 choices=[
-                    questionary.Choice("Risk Profile (volatility, VaR, drawdown, Sharpe)", "risk"),
-                    questionary.Choice("Fund Analysis (expense, rolling returns, consistency)", "analyze"),
-                    questionary.Choice("Skip", "skip"),
+                    questionary.Choice("  \u25b8 Risk Profile (volatility, VaR, Sharpe)", "risk"),
+                    questionary.Choice("  \u25b8 Fund Analysis (expense, rolling returns)", "analyze"),
+                    questionary.Separator("\u2501" * 40),
+                    questionary.Choice("  \u2715 Skip", "skip"),
                 ],
-                style=questionary.Style([("pointer", "fg:cyan bold"), ("highlighted", "fg:cyan bold")]),
+                style=questionary.Style([
+                    ('pointer', 'fg:bright_cyan bold'),
+                    ('highlighted', 'fg:bright_cyan bold'),
+                    ('selected', 'fg:bright_green'),
+                    ('separator', 'fg:#666666 italic'),
+                ]),
             ).ask()
             if deeper == "risk":
                 cmd_global_fund_risk(sym)
@@ -1795,15 +1856,33 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
 def _india_fund_flow(fund_service: FundAnalysisService) -> None:
     while True:
         console.print()
+        console.print(Panel(
+            "[bold cyan]Indian Mutual Fund Explorer[/bold cyan]\n"
+            "[dim]Searching over 37,500+ SEBI-registered schemes via MFAPI.in[/dim]",
+            border_style="bright_blue",
+            title="[bold magenta] \u25c8 MFAPI.in \u25c8 [/bold magenta]",
+            title_align="center",
+            padding=(1, 2)
+        ))
+        
+        choices = [
+            questionary.Separator(" \u2501\u2501\u2501 Actions \u2501\u2501\u2501"),
+            questionary.Choice("  \u25b8 Search by name (e.g., SBI Small Cap)", 1),
+            questionary.Choice("  \u25b8 Look up by scheme code (e.g., 125497)", 2),
+            
+            questionary.Separator("\u2501" * 40),
+            questionary.Choice("  \u25c0 Back to Mutual Funds Menu", 0),
+        ]
+        
         sub = questionary.select(
-            "Indian Mutual Funds (MFAPI.in — 37,500+ funds):",
-            choices=[
-                questionary.Choice("Search by name", 1),
-                questionary.Choice("Look up by scheme code", 2),
-                questionary.Separator(),
-                questionary.Choice("Back", 0),
-            ],
-            style=questionary.Style([('pointer', 'fg:cyan bold'), ('highlighted', 'fg:cyan bold')])
+            "Select an action:",
+            choices=choices,
+            style=questionary.Style([
+                ('pointer', 'fg:bright_cyan bold'),
+                ('highlighted', 'fg:bright_cyan bold'),
+                ('selected', 'fg:bright_green'),
+                ('separator', 'fg:#666666 italic'),
+            ]),
         ).ask()
 
         if sub is None or sub == 0:

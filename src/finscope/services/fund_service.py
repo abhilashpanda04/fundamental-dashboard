@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 
+import pandas as pd
+
 __all__ = ["FundAnalysisService"]
 
 from finscope.exceptions import FundNotFoundError
@@ -57,6 +59,11 @@ class FundAnalysisService:
     def get_global_fund_sparkline(self, symbol: str, period: str = "1y") -> list[float]:
         """Return closing prices for sparkline rendering."""
         return self._provider.get_global_fund_sparkline(symbol, period)
+
+    def get_price_history(self, symbol: str, period: str = "1mo") -> pd.DataFrame:
+        """Return full OHLCV price history from Yahoo Finance."""
+        import yfinance as yf
+        return yf.Ticker(symbol).history(period=period)
 
     def get_popular_funds_snapshot(self, region: str) -> list[dict]:
         """Return a quick snapshot of popular funds for a region."""

@@ -1,325 +1,478 @@
-```
+```text
  _____ _       ____
 |  ___(_)_ __ / ___|  ___ ___  _ __   ___
-| |_  | | '_ \\___ \ / __/ _ \| '_ \ / _ \
+| |_  | | '_ \\___ \ / __/ _ \| '_ \ / _ \\
 |  _| | | | | |___) | (_| (_) | |_) |  __/
 |_|   |_|_| |_|____/ \___\___/| .__/ \___|
-                               |_|    v1.0.0
+                               |_|        
 ```
 
-**Terminal-native financial research. Stocks, ETFs, mutual funds.**
+# finscope
 
-FinScope pulls real-time and historical data from Yahoo Finance, SEC EDGAR,
-and MFAPI.in -- no API keys, no browser, no spreadsheets. Everything renders
-in your terminal via Rich tables, sparklines, and formatted reports.
+Terminal-based financial research for stocks, ETFs, and mutual funds.
 
-```
-$ finscope AAPL
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/abhilashkumarpanda/finscope)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-  APPLE INC.  |  Technology  |  AAPL
-  ----------------------------------------
-  Price        $187.44   Change  +1.23%
-  Market Cap   $2.87T    Beta    1.29
-  52-Week      $143.90 - $199.62
-  Sparkline    ___/^^^^\_/^^^^^
-```
+`finscope` is a command-line research tool and Python library for market analysis. It combines price history, fundamentals, SEC filings, fund discovery, valuation models, risk analytics, and terminal-first rendering in a single workflow.
 
----
+It is built for people who want fast, structured financial research without depending on spreadsheets or browser-heavy tooling.
+
+## Highlights
+
+- Stock, ETF, and mutual fund research from the terminal
+- SEC EDGAR integration for official US filing data
+- Valuation and risk engines built into the CLI
+- Interactive dashboard mode with segmented menus
+- Fund support for global ETFs and Indian mutual funds
+- Python API with lazy-loaded objects and typed models
+- HTML export for shareable reports
 
 ## Table of Contents
 
-- [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Example Output](#example-output)
+- [Core Features](#core-features)
 - [CLI Reference](#cli-reference)
-- [Library API](#library-api)
+- [Interactive Mode](#interactive-mode)
+- [Python API](#python-api)
+- [Data Sources](#data-sources)
 - [Architecture](#architecture)
 - [Testing](#testing)
-- [Data Sources](#data-sources)
 - [Configuration](#configuration)
+- [Roadmap](#roadmap)
 - [License](#license)
-
----
-
-## Features
-
-```
-CATEGORY              DESCRIPTION
---------------------  -----------------------------------------------------------
-Stock Overview        Name, sector, price, live change %, 3-month sparkline
-Key Ratios            P/E, Forward P/E, PEG, P/B, P/S, EV/EBITDA, margins,
-                      ROE, debt/equity, beta, 52-week range
-Price History         OHLCV table + ASCII sparkline for any period (1d to max)
-Financial Statements  Income statement, balance sheet, cash flow (Yahoo Finance)
-SEC EDGAR             XBRL financials (7 categories, 6 fiscal years),
-                      recent filings browser, insider transactions
-Analyst Consensus     Buy / Hold / Sell bar chart
-Holders               Ownership breakdown + top institutional holders
-Comparison            Side-by-side metrics for up to 10 tickers with sparklines
-Watchlist             Compact multi-ticker monitoring table
-Mutual Funds          37,500+ Indian funds (MFAPI.in) + global ETFs via Yahoo
-HTML Export           One-command report with ratios and price history
-```
-
----
 
 ## Installation
 
-Requires Python 3.11+.
+### Requirements
+
+- Python 3.11+
+
+### Install from source
 
 ```bash
-git clone https://github.com/abhilashpanda04/finscope.git
+git clone https://github.com/abhilashkumarpanda/finscope.git
 cd finscope
 uv sync
 ```
 
-Or with pip:
+### Install with pip
 
 ```bash
 pip install -e .
 ```
 
-For development and testing:
+### Development install
 
 ```bash
 uv sync --dev
-# or: pip install -e ".[dev]"
+# or
+pip install -e ".[dev]"
 ```
-
----
 
 ## Quick Start
 
-Pull a stock overview in one command:
+### Single-stock overview
 
 ```bash
+finscope AAPL
+```
+
+### Interactive dashboard
+
+```bash
+finscope AAPL -i
+```
+
+### Valuation and risk
+
+```bash
+finscope AAPL valuate
+finscope AAPL risk 1y
+```
+
+### Compare multiple stocks
+
+```bash
+finscope compare AAPL MSFT GOOGL
+```
+
+### Explore funds
+
+```bash
+finscope funds
+```
+
+### Export an HTML report
+
+```bash
+finscope export AAPL
+```
+
+## Example Output
+
+### Overview
+
+```text
 $ finscope AAPL
+
+Loading AAPL...
+
+╭──────────────────────────── Company Overview ────────────────────────────╮
+│ Apple Inc. (AAPL)                                                        │
+│ Technology / Consumer Electronics                                        │
+│ Exchange: NMS  |  Currency: USD                                          │
+│                                                                            │
+│ USD 230.45  +1.23%                                                       │
+╰───────────────────────────────────────────────────────────────────────────╯
+
+  3-Month Trend: ▁▂▃▄▅▆▇█▇▆▅▄▅▆▇
+
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┓
+┃ Metric               ┃ Value         ┃ Metric               ┃ Value         ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━┩
+┃ Market Cap           ┃ $3.42T        ┃ P/E Ratio            ┃ 31.2          ┃
+┃ Forward P/E          ┃ 28.7          ┃ ROE                  ┃ 147.3%        ┃
+└──────────────────────┴───────────────┴──────────────────────┴───────────────┘
 ```
 
-Compare multiple tickers side by side:
+### Risk profile
 
-```bash
-$ finscope compare AAPL MSFT GOOGL
+```text
+$ finscope AAPL risk 1y
+
+Computing risk profile for AAPL (1y)...
+
+──────────────────────────── Risk Profile: AAPL ────────────────────────────
+  ████████████░░░░░░░░ 63/100  Moderate Risk
+
+  Risk Factors
+    • Elevated volatility vs market
+    • Drawdown exceeds defensive threshold
+
+────────────── Volatility  (src: price history — daily returns) ─────────────
+  Annual Volatility:   27.4%  (High)
+  30D Volatility:      24.1%
+  90D Volatility:      28.8%
+
+──────────── Risk-Adjusted Returns  (src: price history vs risk-free rate) ──
+  Annual Return:       +18.6%
+  Sharpe Ratio:        0.54
+  Sortino Ratio:       0.82
 ```
 
-Export a full HTML report:
+### Interactive dashboard
 
-```bash
-$ finscope export AAPL -o apple_report.html
-```
-
-Launch the interactive research menu:
-
-```bash
+```text
 $ finscope AAPL -i
+
+╭──────────────────────── finscope dashboard ─────────────────────────╮
+│ Apple Inc.                 USD 230.45            Mkt Cap: $3.42T    │
+│ Technology | Hardware      +1.23%               P/E Ratio: 31.2     │
+╰──────────────────────────────────────────────────────────────────────╯
+
+Select an option:
+  Fundamentals
+    ▸ Company Overview
+    ▸ Key Ratios
+    ▸ Price History & Trend
+  Financial Statements
+    ▸ Income Statement
+    ▸ Balance Sheet
+    ▸ Cash Flow Statement
+  Advanced Analysis
+    ▸ Valuation
+    ▸ Risk Profile
+    ▸ Dividend Analysis
 ```
 
----
+### Funds
+
+```text
+$ finscope funds
+
+╭────────────────────────── finscope funds ───────────────────────────╮
+│ Mutual Fund & ETF Explorer                                          │
+│ Browse curated popular lists or search directly via market sources  │
+╰──────────────────────────────────────────────────────────────────────╯
+
+Select a category:
+  Indian Funds
+    ▸ Indian Mutual Funds (MFAPI.in)
+  Global Curated
+    ▸ Popular US Funds
+    ▸ Global ETFs (LSE)
+    ▸ Fixed Income / Bond ETFs
+```
+
+## Core Features
+
+### Equity and market research
+
+- Company overview with price snapshot and sparkline
+- Key ratios and operating metrics
+- Historical OHLCV price data across standard periods
+- Recent news and analyst recommendations
+- Major holders and ownership breakdown
+
+### Financial statements and filings
+
+- Income statement, balance sheet, and cash flow views
+- SEC EDGAR XBRL financial extraction
+- Recent SEC filings
+- Insider transaction tracking
+
+### Analytics
+
+- Valuation models
+  - Graham Number
+  - Discounted Cash Flow
+  - PEG fair value
+  - Relative valuation
+  - Piotroski F-Score
+  - Altman Z-Score
+- Risk analytics
+  - Volatility
+  - Value at Risk and Conditional VaR
+  - Max drawdown
+  - Sharpe, Sortino, and Calmar ratios
+  - Beta and correlation versus market
+- Dividend analysis and reinvestment views
+- Earnings trend and surprise analysis
+- Peer comparison
+- S&P 500 screening
+
+### Funds and portfolio workflows
+
+- Global ETF and fund snapshot views
+- Fund risk and rolling-return analysis
+- Indian mutual fund search and NAV history
+- Persistent watchlist
+- Portfolio tracking and summary metrics
+
+### Output
+
+- Interactive terminal dashboard mode
+- Rich tables, rules, sparklines, and formatted panels
+- HTML report export
+- Programmatic Python API
 
 ## CLI Reference
 
-All commands follow the pattern `finscope <TICKER> <command> [options]`.
+Command pattern:
 
-```
-COMMAND               EXAMPLE                              OUTPUT
---------------------  -----------------------------------  -------------------------
-(default)             finscope AAPL                        Stock overview + sparkline
-ratios                finscope AAPL ratios                 Key financial ratios
-price <period>        finscope AAPL price 1y               OHLCV + sparkline (1 year)
-financials            finscope AAPL financials             Income statement
-balance-sheet         finscope AAPL balance-sheet          Balance sheet
-cashflow              finscope AAPL cashflow               Cash flow statement
-news                  finscope AAPL news                   Recent headlines
-analysts              finscope AAPL analysts               Analyst recommendations
-holders               finscope AAPL holders                Major holders
-sec-financials        finscope AAPL sec-financials         SEC EDGAR XBRL data
-sec-filings           finscope AAPL sec-filings            Recent SEC filings
-insiders              finscope AAPL insiders               Insider transactions
-compare               finscope compare AAPL MSFT GOOGL    Side-by-side comparison
-watchlist              finscope watchlist AAPL TSLA NVDA   Compact multi-ticker table
-export                finscope export AAPL                 HTML report (aapl_report.html)
-export -o <path>      finscope export AAPL -o out.html     Custom output path
-funds                 finscope funds                       Mutual funds explorer
--i                    finscope AAPL -i                     Interactive menu mode
+```text
+finscope <ticker> <command> [options]
 ```
 
-### Periods for price history
+### Core commands
 
-```
+| Command | Example | Description |
+| :--- | :--- | :--- |
+| default overview | `finscope AAPL` | Quick company overview |
+| ratios | `finscope AAPL ratios` | Key financial ratios |
+| price | `finscope AAPL price 1y` | Historical price table |
+| financials | `finscope AAPL financials` | Income statement |
+| balance-sheet | `finscope AAPL balance-sheet` | Balance sheet |
+| cashflow | `finscope AAPL cashflow` | Cash flow statement |
+| news | `finscope AAPL news` | Recent headlines |
+| analysts | `finscope AAPL analysts` | Analyst recommendations |
+| holders | `finscope AAPL holders` | Ownership breakdown |
+| sec-financials | `finscope AAPL sec-financials` | SEC XBRL financials |
+| sec-filings | `finscope AAPL sec-filings` | Recent SEC filings |
+| insiders | `finscope AAPL insiders` | Insider transaction history |
+| valuate | `finscope AAPL valuate` | Composite valuation models |
+| risk | `finscope AAPL risk 1y` | Risk profile and downside metrics |
+| dividends | `finscope AAPL dividends` | Dividend profile and history |
+| earnings | `finscope AAPL earnings` | Earnings trend and surprise history |
+| peers | `finscope AAPL peers` | Peer discovery and comparison |
+| export | `finscope export AAPL` | HTML report export |
+
+### Workflow commands
+
+| Command | Example | Description |
+| :--- | :--- | :--- |
+| compare | `finscope compare AAPL MSFT GOOGL` | Side-by-side stock comparison |
+| watchlist | `finscope watchlist AAPL TSLA NVDA` | Quick watchlist table |
+| watch | `finscope watch add AAPL MSFT` | Persistent watchlist management |
+| portfolio | `finscope portfolio add AAPL 50 142.50` | Portfolio tracking |
+| screen | `finscope screen "pe < 15"` | S&P 500 screener |
+| funds | `finscope funds` | Mutual fund and ETF explorer |
+| interactive | `finscope AAPL -i` | Dashboard mode |
+
+### Supported price periods
+
+```text
 1d  5d  1mo  3mo  6mo  1y  2y  5y  10y  ytd  max
 ```
 
----
+## Interactive Mode
 
-## Library API
+Interactive mode provides a grouped terminal dashboard for:
 
-FinScope exposes a typed Python API for programmatic use.
+- overview and market data
+- statements and filings
+- advanced analysis
+- comparison and screening
+- watchlist, portfolio, and funds
 
-### Stock analysis
+Launch with:
+
+```bash
+finscope AAPL -i
+```
+
+Or start without a ticker:
+
+```bash
+finscope -i
+```
+
+## Python API
+
+`finscope` is also available as a Python library.
+
+### Stock research
 
 ```python
 import finscope
 
 aapl = finscope.stock("AAPL")
 
-# Ratios -- lazy-loaded, cached, typed
-aapl.ratios.pe_ratio           # 28.5
-aapl.ratios.market_cap         # 2_700_000_000_000
-aapl.ratios.debt_to_equity     # 1.87
+info = aapl.info
+ratios = aapl.ratios
+history = aapl.price_history("1y")
+news = aapl.news
+filings = aapl.sec_filings(count=10)
 
-# Price history -- returns a pandas DataFrame
-df = aapl.price_history("1y")
-# columns: Open, High, Low, Close, Volume
-
-# Sparkline data
-aapl.sparkline                 # [100.0, 105.3, ...]
-
-# News, financials, SEC data
-aapl.news                      # list of article dicts
-aapl.financials                # income statement DataFrame
-aapl.sec_financials            # XBRL data from SEC EDGAR
-aapl.insider_transactions      # Form 4 filings
-
-# Export
-aapl.export_html()             # writes aapl_report.html
+valuation = aapl.valuate()
+risk = aapl.risk(period="1y")
 ```
 
-### Multi-stock comparison
+### Comparison
 
 ```python
-# From a stock object
-aapl.compare_with("MSFT", "GOOGL")    # list[ComparisonData]
-
-# Standalone function
-finscope.compare("AAPL", "MSFT")
+results = finscope.compare("AAPL", "MSFT", "GOOGL")
 ```
 
-### Fund analysis
+### Funds
 
 ```python
 vwrl = finscope.fund("VWRL.L")
-vwrl.info                      # fund metadata
-vwrl.returns                   # historical returns
-vwrl.sparkline                 # NAV sparkline data
+info = vwrl.info
+returns = vwrl.returns
+risk = vwrl.risk("1y")
+analysis = vwrl.analyze()
 ```
-
----
-
-## Architecture
-
-```
-src/finscope/
-|
-|-- exceptions.py              Typed exception hierarchy
-|-- config.py                  Singleton Config (env-var aware)
-|-- models.py                  Typed dataclasses (KeyRatios, ComparisonData, ...)
-|
-|-- stock.py                   Stock + Fund facade classes (library entry points)
-|
-|-- providers/                 Strategy pattern -- one class per data source
-|   |-- base.py                  Abstract interfaces
-|   |-- yahoo_provider.py       Yahoo Finance via yfinance
-|   |-- sec_edgar_provider.py   SEC EDGAR XBRL + filings
-|   +-- mfapi_provider.py       MFAPI.in (India) + Yahoo (global ETFs)
-|
-|-- services/                  Facade pattern -- orchestrate providers
-|   |-- stock_service.py         All stock operations
-|   +-- fund_service.py          All fund operations
-|
-|-- ui/                        Presentation layer
-|   |-- formatters.py            Pure formatting functions
-|   |-- builders.py              Builder pattern for Rich tables
-|   +-- renderers.py             All render functions
-|
-+-- cli.py                     Direct subcommands + opt-in interactive menu (-i)
-```
-
-### Design decisions
-
-```
-PATTERN      LOCATION           RATIONALE
------------  -----------------  -----------------------------------------------
-Strategy     providers/         Swap data sources without touching callers
-Facade       services/          Single clean API over complex provider logic
-Builder      ui/builders.py     Eliminate repetitive Rich table boilerplate
-Command      cli.py             Each action is independently testable, zero if/elif
-Singleton    config.py          One source of truth for all runtime settings
-```
-
----
-
-## Testing
-
-325 tests across three tiers. Unit and smoke tests run offline in under a second.
-
-```bash
-# Default: unit + smoke tests (no network, ~0.6s)
-pytest
-
-# Include live API integration tests
-pytest -m integration -v
-
-# With coverage report
-pytest --cov=finscope --cov-report=term-missing
-```
-
-### Test breakdown
-
-```
-SUITE                  COUNT   NETWORK   PURPOSE
----------------------  ------  --------  ------------------------------------------
-tests/smoke/           54      No        Imports, wiring, object construction
-tests/unit/            244     No        All logic paths, fully mocked
-tests/integration/     27      Yes       Real Yahoo / SEC EDGAR / MFAPI calls
-```
-
----
 
 ## Data Sources
 
-All data sources are free and require no API keys.
+`finscope` uses different providers for different data classes.
 
+| Source | Role | Used for |
+| :--- | :--- | :--- |
+| **SEC EDGAR** | Primary official source | US XBRL financials, filings, insider trades |
+| **Yahoo Finance** | Secondary market-data source | Prices, ratios, analyst sentiment, news, global ETFs/funds |
+| **MFAPI.in** | Primary source for Indian funds | Indian mutual fund metadata and NAV histories |
+
+### Sourcing policy
+
+- Official filing data is preferred where available
+- Yahoo Finance is used as a broad-coverage market-data layer
+- Terminal views include source attribution
+- Missing or weak source coverage falls back gracefully rather than failing hard
+
+### Note on trust and coverage
+
+Yahoo Finance is convenient and broad, but it should not be treated as the sole trust anchor for every field. For high-trust US fundamentals, `finscope` prefers SEC EDGAR where possible. The current architecture also makes it straightforward to add alternative or premium providers in the future.
+
+## Architecture
+
+```text
+src/finscope/
+├── cli.py                  CLI entry point and interactive dashboard
+├── stock.py                High-level Stock and Fund facades
+├── services/               Orchestration layer over providers
+├── providers/              Data-source adapters
+├── risk/                   Risk models and computations
+├── valuation/              Valuation models and verdicts
+├── fund_analysis/          Fund analysis engines
+├── ui/                     Rich renderers, formatters, builders
+├── models.py               Shared typed data models
+├── exceptions.py           Exception hierarchy
+└── config.py               Runtime configuration
 ```
-SOURCE                 DATA                                         COST
----------------------  -------------------------------------------  ---------
-Yahoo Finance          Prices, ratios, financials, news, ETFs       Free
-SEC EDGAR              XBRL financials, filings, insider trades     Free
-MFAPI.in               37,500+ Indian mutual fund NAV histories     Free
+
+### Design choices
+
+| Pattern | Usage |
+| :--- | :--- |
+| Strategy | Swap data providers without changing callers |
+| Facade | Expose simple service interfaces over multiple providers |
+| Builder | Standardize Rich table creation |
+| Command-style CLI actions | Keep menu actions modular and testable |
+| Typed dataclasses | Keep output structures explicit and predictable |
+
+## Testing
+
+Run the default suite:
+
+```bash
+pytest
 ```
 
-- [Yahoo Finance](https://finance.yahoo.com)
-- [SEC EDGAR](https://www.sec.gov/edgar)
-- [MFAPI.in](https://www.mfapi.in)
+Run integration tests:
 
-SEC EDGAR requires a contact email in the User-Agent header per their
-fair-access policy. FinScope provides a default but you should set your own.
+```bash
+pytest -m integration -v
+```
 
----
+Run with coverage:
+
+```bash
+pytest --cov=finscope --cov-report=term-missing
+```
+
+Recommended practice:
+
+- use unit and smoke tests for routine local development
+- run integration tests when changing providers or network behavior
+- validate CLI rendering after changing menus or output models
 
 ## Configuration
 
-```
-VARIABLE             DEFAULT                        PURPOSE
--------------------  -----------------------------  --------------------------------
-SEC_EDGAR_EMAIL      finscope-user@example.com      SEC EDGAR User-Agent contact
-```
+### Environment variables
 
-Set via environment:
+| Variable | Default | Purpose |
+| :--- | :--- | :--- |
+| `SEC_EDGAR_EMAIL` | `finscope-user@example.com` | Contact email in SEC EDGAR User-Agent |
+
+Example:
 
 ```bash
 export SEC_EDGAR_EMAIL=you@example.com
 ```
 
----
+## Roadmap
+
+Good next steps that fit the current architecture include:
+
+- additional premium market-data providers
+- macro and rates dashboards
+- options and volatility workflows
+- benchmark-relative fund analytics
+- portfolio stress testing
+- broader official-source replacement for third-party fields
 
 ## License
 
 MIT
 
----
-
-```
-finscope v1.0.0
-terminal-native financial research
-https://github.com/abhilashpanda04/finscope
+```text
+finscope
+Terminal-native financial research.
+Built for speed. Structured for analysis. Sourced with traceability.
 ```

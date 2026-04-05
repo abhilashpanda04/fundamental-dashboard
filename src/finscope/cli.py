@@ -56,6 +56,7 @@ from finscope.ui import (
     render_ratios,
     render_sec_filings,
     render_watchlist,
+    render_attribution,
 )
 
 console = Console()
@@ -65,7 +66,7 @@ console = Console()
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Top-level keywords that are NOT ticker symbols
-_KEYWORDS = {"compare", "watchlist", "export", "funds"}
+_KEYWORDS = {"compare", "watchlist", "export", "funds", "screen"}
 
 # Valid stock sub-commands
 _STOCK_SUBCOMMANDS = {
@@ -100,12 +101,14 @@ def cmd_overview(symbol: str) -> None:
     render_header(s.info, s.sparkline)
     render_description(s.info)
     render_ratios(s.ratios.to_display_dict())
+    render_attribution("Yahoo Finance")
 
 
 def cmd_ratios(symbol: str) -> None:
     s = _load_stock(symbol)
     render_header(s.info, s.sparkline)
     render_ratios(s.ratios.to_display_dict())
+    render_attribution("Yahoo Finance")
 
 
 def cmd_price(symbol: str, period: str = "1mo") -> None:
@@ -113,39 +116,46 @@ def cmd_price(symbol: str, period: str = "1mo") -> None:
     df = s.price_history(period)
     sparkline = s._service.get_sparkline(symbol, period=period)
     render_price_history(df, period, sparkline)
+    render_attribution("Yahoo Finance")
 
 
 def cmd_financials(symbol: str) -> None:
     s = _load_stock(symbol)
     render_financials(s.financials, "Income Statement")
+    render_attribution("Yahoo Finance")
 
 
 def cmd_balance_sheet(symbol: str) -> None:
     s = _load_stock(symbol)
     render_financials(s.balance_sheet, "Balance Sheet")
+    render_attribution("Yahoo Finance")
 
 
 def cmd_cashflow(symbol: str) -> None:
     s = _load_stock(symbol)
     render_financials(s.cashflow, "Cash Flow Statement")
+    render_attribution("Yahoo Finance")
 
 
 def cmd_news(symbol: str) -> None:
     s = _load_stock(symbol)
     render_header(s.info, s.sparkline)
     render_news(s.news)
+    render_attribution("Yahoo Finance")
 
 
 def cmd_analysts(symbol: str) -> None:
     s = _load_stock(symbol)
     render_header(s.info, s.sparkline)
     render_analyst_recommendations(s.analyst_recommendations)
+    render_attribution("Yahoo Finance")
 
 
 def cmd_holders(symbol: str) -> None:
     s = _load_stock(symbol)
     breakdown, institutional = s.holders
     render_major_holders(breakdown, institutional)
+    render_attribution("Yahoo Finance")
 
 
 def cmd_sec_financials(symbol: str, category: str = "income") -> None:
@@ -156,16 +166,19 @@ def cmd_sec_financials(symbol: str, category: str = "income") -> None:
         console.print("[red]No SEC EDGAR data found for this ticker.[/red]")
         return
     render_detailed_financials(edgar_data, cat_label)
+    render_attribution("SEC EDGAR")
 
 
 def cmd_sec_filings(symbol: str) -> None:
     s = _load_stock(symbol)
     render_sec_filings(s.sec_filings(count=20))
+    render_attribution("SEC EDGAR")
 
 
 def cmd_insiders(symbol: str) -> None:
     s = _load_stock(symbol)
     render_insider_transactions(s.insider_transactions)
+    render_attribution("SEC EDGAR")
 
 
 def cmd_valuate(symbol: str) -> None:
@@ -268,6 +281,7 @@ def cmd_valuate(symbol: str) -> None:
     else:
         console.print("  [dim]Insufficient balance sheet data[/dim]")
 
+    render_attribution("Yahoo Finance, SEC EDGAR")
     console.print()
 
 
@@ -278,6 +292,7 @@ def cmd_compare(symbols: list[str]) -> None:
     console.print(f"\nComparing [bold cyan]{', '.join(symbols)}[/bold cyan]...\n")
     data = fs.compare(*symbols)
     render_comparison([vars(d) for d in data])
+    render_attribution("Yahoo Finance")
 
 
 def cmd_watchlist(symbols: list[str]) -> None:
@@ -287,12 +302,71 @@ def cmd_watchlist(symbols: list[str]) -> None:
     console.print(f"\nLoading watchlist for [bold cyan]{', '.join(symbols)}[/bold cyan]...\n")
     data = fs.compare(*symbols)
     render_watchlist([vars(d) for d in data])
+    render_attribution("Yahoo Finance")
 
 
 def cmd_export(symbol: str, output: str | None = None) -> None:
     s = _load_stock(symbol)
     path = s.export_html(output)
     console.print(f"\n[bold green]✓ Report exported to {path}[/bold green]")
+
+
+def cmd_screen(query: str) -> None:
+    """Run the stock screener with the given query."""
+    console.print(f"\n[bold cyan]Screening S&P 500 stocks...[/bold cyan]")
+    console.print(f"[dim]Query: {query}[/dim]\n")
+    
+    from finscope.screener import screen
+    results = screen(query)
+    
+    if not results:
+        console.print("[yellow]No stocks matched your criteria.[/yellow]")
+        return
+        
+    from finscope.ui.builders import TableBuilder
+    builder = (
+        TableBuilder(f"Screener Results ({len(results)} matches)")
+        .border("blue")
+        .column("Ticker", style="bold cyan")
+        .column("Sector")
+        .column("Price", justify="right")
+        .column("Market Cap", justify="right")
+        .column("P/E", justify="right")
+        .column("ROE", justify="right")
+        .column("Div Yield", justify="right")
+    )
+    
+    for r in results:
+        m = r.metrics
+        pe_str = f"{m.get('pe'):.1f}" if m.get("pe") else "N/A"
+        roe_str = f"{m.get('roe'):.1f}%" if m.get("roe") else "N/A"
+        div_str = f"{m.get('dividend_yield'):.2f}%" if m.get("dividend_yield") else "N/A"
+        price_str = f"${m.get('current_price'):.2f}" if m.get("current_price") else "N/A"
+        
+        # Format large market cap
+        mcap = m.get("market_cap")
+        if mcap:
+            if mcap >= 1e12:
+                mcap_str = f"${mcap/1e12:.2f}T"
+            elif mcap >= 1e9:
+                mcap_str = f"${mcap/1e9:.2f}B"
+            else:
+                mcap_str = f"${mcap/1e6:.2f}M"
+        else:
+            mcap_str = "N/A"
+            
+        builder.row(
+            r.symbol, 
+            m.get("sector") or "N/A", 
+            price_str,
+            mcap_str,
+            pe_str,
+            roe_str,
+            div_str
+        )
+        
+    console.print(builder.build())
+    render_attribution("Yahoo Finance")
 
 
 # ── AI commands ───────────────────────────────────────────────────────────────
@@ -493,11 +567,13 @@ class OverviewCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         render_header(ctx.info, ctx.sparkline)
         render_description(ctx.info)
+        render_attribution("Yahoo Finance")
 
 
 class KeyRatiosCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         render_ratios(ctx.stock.ratios.to_display_dict())
+        render_attribution("Yahoo Finance")
 
 
 class PriceHistoryCommand(DashboardCommand):
@@ -510,37 +586,44 @@ class PriceHistoryCommand(DashboardCommand):
         df = ctx.stock.price_history(period)
         sparkline = ctx.stock._service.get_sparkline(ctx.symbol, period=period)
         render_price_history(df, period, sparkline)
+        render_attribution("Yahoo Finance")
 
 
 class IncomeStatementCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         render_financials(ctx.stock.financials, "Income Statement")
+        render_attribution("Yahoo Finance")
 
 
 class BalanceSheetCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         render_financials(ctx.stock.balance_sheet, "Balance Sheet")
+        render_attribution("Yahoo Finance")
 
 
 class CashFlowCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         render_financials(ctx.stock.cashflow, "Cash Flow Statement")
+        render_attribution("Yahoo Finance")
 
 
 class NewsCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         render_news(ctx.stock.news)
+        render_attribution("Yahoo Finance")
 
 
 class AnalystRecsCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         render_analyst_recommendations(ctx.stock.analyst_recommendations)
+        render_attribution("Yahoo Finance")
 
 
 class MajorHoldersCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         breakdown, institutional = ctx.stock.holders
         render_major_holders(breakdown, institutional)
+        render_attribution("Yahoo Finance")
 
 
 class SecDetailedFinancialsCommand(DashboardCommand):
@@ -552,18 +635,21 @@ class SecDetailedFinancialsCommand(DashboardCommand):
             return
         sub = Prompt.ask("Category", choices=list(_SEC_CAT_MAP), default="income")
         render_detailed_financials(edgar_data, _SEC_CAT_MAP[sub])
+        render_attribution("SEC EDGAR")
 
 
 class SecFilingsCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         console.print("Loading recent SEC filings...")
         render_sec_filings(ctx.stock.sec_filings(count=20))
+        render_attribution("SEC EDGAR")
 
 
 class InsiderTransactionsCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         console.print("Loading insider transactions...")
         render_insider_transactions(ctx.stock.insider_transactions)
+        render_attribution("SEC EDGAR")
 
 
 class CompareStocksCommand(DashboardCommand):
@@ -578,6 +664,7 @@ class CompareStocksCommand(DashboardCommand):
         console.print(f"Loading comparison for {', '.join(symbols)}...")
         data = ctx.stock.compare_with(*symbols[1:])
         render_comparison([vars(d) for d in data])
+        render_attribution("Yahoo Finance")
 
 
 class WatchlistCommand(DashboardCommand):
@@ -590,6 +677,7 @@ class WatchlistCommand(DashboardCommand):
         console.print(f"Loading watchlist for {', '.join(symbols)}...")
         data = fs.compare(*symbols)
         render_watchlist([vars(d) for d in data])
+        render_attribution("Yahoo Finance")
 
 
 class ExportHtmlCommand(DashboardCommand):
@@ -716,6 +804,7 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
             console.print(f"\nLoading {region} funds...")
             data = fund_service.get_popular_funds_snapshot(region)
             render_global_fund_snapshot(data, region)
+            render_attribution("Yahoo Finance")
 
         elif choice == 7:
             sym = Prompt.ask("Enter fund/ETF ticker (e.g., VWRL.L, INDA, AGG)")
@@ -728,6 +817,7 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
                 console.print(f"[red]Could not find fund: {sym}[/red]")
                 continue
             render_global_fund_detail(sym, f.info, f.returns, f.sparkline)
+            render_attribution("Yahoo Finance")
 
         else:
             console.print("[red]Invalid option.[/red]")
@@ -783,6 +873,8 @@ def _show_india_fund(fund_service: FundAnalysisService, scheme_code: str) -> Non
     spark_vals = fund_service.get_india_fund_nav_series(nav_data, days=365)
     if spark_vals:
         console.print(f"  1Y NAV Trend: {make_sparkline(spark_vals, width=60)}")
+        
+    render_attribution("MFAPI.in")
 
 
 # ── Interactive loop ──────────────────────────────────────────────────────────
@@ -867,6 +959,7 @@ examples:
   finscope AAPL valuate              Valuation analysis (6 models)
   finscope compare AAPL MSFT GOOGL  Side-by-side comparison
   finscope watchlist AAPL TSLA NVDA Compact watchlist
+  finscope screen "pe < 15"         Screen S&P 500 stocks
   finscope export AAPL              HTML report
   finscope funds                    Mutual funds explorer
   finscope AAPL -i                  Interactive menu mode
@@ -969,6 +1062,14 @@ def _dispatch(parsed: argparse.Namespace) -> None:
             console.print("[red]Usage: finscope export TICKER [--output file.html][/red]")
             return
         cmd_export(args[1].upper(), output=parsed.output)
+        return
+
+    if first == "screen":
+        if len(args) < 2:
+            console.print("[red]Usage: finscope screen \"QUERY\"[/red]")
+            console.print("[dim]Example: finscope screen \"pe < 20 and roe > 15\"[/dim]")
+            return
+        cmd_screen(" ".join(args[1:]))
         return
 
     if first == "funds":

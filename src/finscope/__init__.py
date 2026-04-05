@@ -90,6 +90,9 @@ from finscope.providers import MfapiProvider, SecEdgarProvider, YahooFinanceProv
 # ── Valuation engine ──────────────────────────────────────────────────────────
 from finscope.valuation import StockValuation, valuate as valuate_stock
 
+# ── Screener ──────────────────────────────────────────────────────────────────
+from finscope.screener import screen, ScreenerResult
+
 
 # ── Top-level factory functions ───────────────────────────────────────────────
 
@@ -207,4 +210,7 @@ __all__ = [
     # Valuation
     "StockValuation",
     "valuate_stock",
+    # Screener
+    "screen",
+    "ScreenerResult",
 ]

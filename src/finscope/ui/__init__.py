@@ -22,6 +22,7 @@ from finscope.ui.renderers import (
     render_india_fund_search_results,
     render_global_fund_snapshot,
     render_global_fund_detail,
+    render_attribution,
 )
 
 __all__ = [
@@ -52,4 +53,5 @@ __all__ = [
     "render_india_fund_search_results",
     "render_global_fund_snapshot",
     "render_global_fund_detail",
+    "render_attribution",
 ]

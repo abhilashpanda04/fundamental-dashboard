@@ -27,16 +27,21 @@ class ScreenerResult:
 
 def get_sp500_tickers() -> list[str]:
     """Fetch the current S&P 500 tickers from Wikipedia."""
-    try:
-        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        tables = pd.read_html(url)
-        df = tables[0]
-        # Wikipedia sometimes uses dots instead of dashes for ticker symbols (BRK.B -> BRK-B)
-        tickers = df["Symbol"].str.replace(".", "-", regex=False).tolist()
-        return tickers
-    except Exception as e:
-        logger.warning(f"Could not fetch S&P 500 tickers from Wikipedia: {e}")
-        return []
+    url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    # Try parsers in order: lxml (fastest) → html5lib → html.parser (stdlib, always available)
+    for flavor in ("lxml", "html5lib", "html.parser"):
+        try:
+            tables = pd.read_html(url, flavor=flavor)
+            df = tables[0]
+            tickers = df["Symbol"].str.replace(".", "-", regex=False).tolist()
+            logger.debug(f"S&P 500 tickers fetched via {flavor} ({len(tickers)} symbols)")
+            return tickers
+        except ImportError:
+            continue          # parser not installed, try next
+        except Exception as e:
+            logger.warning(f"Could not fetch S&P 500 tickers (flavor={flavor}): {e}")
+            break
+    return []
 
 
 def _fetch_stock_metrics(symbol: str) -> dict[str, Any] | None:

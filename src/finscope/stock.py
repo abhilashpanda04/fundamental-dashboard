@@ -200,6 +200,21 @@ class Stock:
 
     # ── AI-powered analysis (requires API key) ────────────────────────────────
 
+    def dividends(self) -> "DividendAnalysis":
+        """Dividend analysis: history, growth, payout ratio, DRIP simulation."""
+        from finscope.dividends import analyze_dividends
+        return analyze_dividends(self._symbol, stock=self)
+
+    def earnings(self) -> "EarningsAnalysis":
+        """Earnings analysis: surprise history, beat rate, next date."""
+        from finscope.earnings import analyze_earnings
+        return analyze_earnings(self._symbol, stock=self)
+
+    def peers(self, max_peers: int = 8) -> "PeerComparison":
+        """Auto-discover sector peers and compare multiples."""
+        from finscope.peers import discover_peers
+        return discover_peers(self._symbol, max_peers=max_peers, stock=self)
+
     def valuate(self) -> "StockValuation":
         """Run all valuation models — pure financial logic, no AI needed.
 
@@ -220,6 +235,30 @@ class Stock:
         """
         from finscope.valuation import valuate
         return valuate(self._symbol)
+
+    def risk(self, period: str = "1y") -> "StockRisk":
+        """Compute a comprehensive risk profile — pure financial math, no AI needed.
+
+        Computes volatility, VaR/CVaR, max drawdown, Sharpe/Sortino/Calmar,
+        beta vs S&P 500, and fundamental balance-sheet risk.
+
+        Args:
+            period: Look-back window for price history (default ``"1y"``).
+
+        Returns:
+            A :class:`~finscope.risk.models.StockRisk`.
+
+        Example::
+
+            r = aapl.risk()
+            r.risk_level                  # "Moderate"
+            r.volatility.annual_vol       # 0.24
+            r.downside.max_drawdown       # -0.31
+            r.risk_adjusted.sharpe_ratio  # 1.12
+            r.market.beta                 # 1.24
+        """
+        from finscope.risk import compute_risk
+        return compute_risk(self._symbol, period=period, stock=self)
 
     async def analyze(self) -> "StockAnalysis":
         """Run a comprehensive AI analysis of this stock.
@@ -336,6 +375,22 @@ class Fund:
     def sparkline(self) -> list[float]:
         """1-year closing-price series for trend charts."""
         return self._service.get_global_fund_sparkline(self._symbol, period="1y")
+
+    def risk(self, period: str = "1y") -> "FundRisk":
+        """Compute a risk profile from NAV/price history.
+
+        Covers volatility, VaR/CVaR, max drawdown, Sharpe/Sortino/Calmar,
+        and beta vs SPY (for global ETFs).
+        """
+        from finscope.fund_analysis import analyze_global_fund
+        risk_result, _ = analyze_global_fund(self._symbol, fund=self, period=period)
+        return risk_result
+
+    def analyze(self) -> "FundAnalysis":
+        """Fund-specific analysis: expense ratio, rolling returns, return consistency."""
+        from finscope.fund_analysis import analyze_global_fund
+        _, analysis = analyze_global_fund(self._symbol, fund=self)
+        return analysis
 
     # ── Dunder helpers ────────────────────────────────────────────────────────
 

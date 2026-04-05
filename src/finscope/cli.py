@@ -67,14 +67,14 @@ console = Console()
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Top-level keywords that are NOT ticker symbols
-_KEYWORDS = {"compare", "watchlist", "export", "funds", "screen"}
+_KEYWORDS = {"compare", "watchlist", "export", "funds", "screen", "portfolio", "watch"}
 
 # Valid stock sub-commands
 _STOCK_SUBCOMMANDS = {
     "ratios", "price", "financials", "balance-sheet", "cashflow",
     "news", "analysts", "holders", "sec-financials", "sec-filings",
     "insiders", "overview", "analyze", "ask", "summarize-filings",
-    "valuate",
+    "valuate", "risk", "dividends", "earnings", "peers",
 }
 
 _SEC_CAT_MAP = {
@@ -208,6 +208,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # Graham Number
     console.print(Rule("Graham Number  [dim](src: Yahoo Finance — EPS, Book Value)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Stocks trading [bold]below[/bold] their Graham Number have a margin of safety. "
+                  "Formula: \u221a(22.5 \u00d7 EPS \u00d7 Book Value) \u2014 assumes max 15\u00d7 earnings and 1.5\u00d7 book value. "
+                  "Best for mature, asset-heavy companies. Most high-growth tech stocks fail this test because "
+                  "their value lies in intangibles, not book value.[/dim]")
     g = v.graham
     if g.calculable:
         console.print(f"  EPS: {g.eps:.2f}  |  Book Value: {g.book_value_per_share:.2f}")
@@ -219,6 +223,11 @@ def cmd_valuate(symbol: str) -> None:
 
     # DCF
     console.print(Rule("DCF (Discounted Cash Flow)  [dim](src: Yahoo Finance — Free Cash Flow, Beta, Growth)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Projects future free cash flows and discounts them to today's value. "
+                  "The most comprehensive intrinsic value model, but highly sensitive to inputs \u2014 "
+                  "a 2% change in growth rate can swing the result by 30\u201350%. "
+                  "Discount rate is estimated via CAPM (risk-free rate + beta \u00d7 market premium). "
+                  "Most reliable for companies with stable, predictable cash flows.[/dim]")
     d = v.dcf
     if d.calculable:
         console.print(f"  Free Cash Flow: ${d.free_cash_flow/1e9:.2f}B" if d.free_cash_flow else "")
@@ -232,6 +241,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # PEG Fair Value
     console.print(Rule("PEG Fair Value (Peter Lynch)  [dim](src: Yahoo Finance — EPS, Earnings Growth)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Peter Lynch's rule \u2014 a fairly valued stock has P/E equal to its "
+                  "earnings growth rate (PEG = 1). Fair price = growth rate \u00d7 EPS. "
+                  "PEG < 1: potentially undervalued relative to growth. PEG > 1.5: potentially overvalued. "
+                  "Unreliable when earnings are negative or highly volatile.[/dim]")
     p = v.peg
     if p.calculable:
         console.print(f"  EPS: {p.eps:.2f}  |  Growth Rate: {p.earnings_growth_rate:.1f}%")
@@ -244,6 +257,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # Relative
     console.print(Rule("Relative Valuation  [dim](src: Yahoo Finance — P/E, P/B, 50D/200D Averages)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Compares the current price to the stock's own moving averages and multiples. "
+                  "This is relative (not absolute) \u2014 trading below the 200D avg means historically cheap "
+                  "for [bold]this stock[/bold], not necessarily cheap in absolute terms. "
+                  "P/E < 12 is broadly cheap; P/E > 35 is expensive.[/dim]")
     r = v.relative
     if r.pe_current:
         console.print(f"  P/E: {r.pe_current:.1f}  |  P/B: {r.pb_current:.1f}" if r.pb_current else f"  P/E: {r.pe_current:.1f}")
@@ -261,6 +278,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # Piotroski
     console.print(Rule("Piotroski F-Score  [dim](src: Yahoo Finance — ROA, OCF, Margins, Ratios)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: A 9-point [bold]financial health[/bold] checklist, not a price model. "
+                  "4 pts for profitability, 3 for leverage/liquidity, 2 for efficiency. "
+                  "8\u20139 = financially strong (bullish signal), 5\u20137 = average, 0\u20134 = weak (bearish signal). "
+                  "A high score means strong fundamentals \u2014 a company can still be expensive with a high score.[/dim]")
     f = v.piotroski
     bar = "\u2588" * f.score + "\u2591" * (9 - f.score)
     score_color = "green" if f.score >= 7 else "yellow" if f.score >= 4 else "red"
@@ -271,6 +292,10 @@ def cmd_valuate(symbol: str) -> None:
 
     # Altman Z-Score
     console.print(Rule("Altman Z-Score  [dim](src: Yahoo Finance — Assets, Liabilities, EBITDA, Revenue)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: A [bold]bankruptcy risk[/bold] indicator, not a valuation model. "
+                  "Z > 2.99 = Safe (low distress risk). 1.81\u20132.99 = Grey zone (monitor closely). "
+                  "Z < 1.81 = Distress zone (elevated bankruptcy risk). "
+                  "Originally designed for manufacturing companies \u2014 less reliable for asset-light tech or financial firms.[/dim]")
     a = v.altman
     if a.calculable:
         zone_colors = {"Safe": "green", "Grey": "yellow", "Distress": "bold red"}
@@ -394,6 +419,724 @@ def _run_async(coro):
     """Run an async coroutine from sync CLI code."""
     import asyncio
     return asyncio.run(coro)
+
+
+def cmd_risk(symbol: str, period: str = "1y") -> None:
+    """Full risk profile: volatility, drawdown, Sharpe, beta, fundamentals."""
+    console.print(f"\nComputing risk profile for [bold cyan]{symbol}[/bold cyan] ({period})...\n")
+    from finscope.risk import compute_risk
+    r = compute_risk(symbol, period=period)
+
+    # ── Composite ──────────────────────────────────────────────────────────
+    level_colors = {
+        "Low": "bold green", "Moderate": "yellow",
+        "High": "bold red", "Very High": "bold red on white",
+    }
+    lc = level_colors.get(r.risk_level, "white")
+    bar_len = int((r.risk_score or 0) / 5)
+    bar = "█" * bar_len + "░" * (20 - bar_len)
+
+    console.print(Rule(f"Risk Profile: {r.symbol}", style="bold magenta"))
+    console.print(f"  [{lc}]{bar} {r.risk_score:.0f}/100  {r.risk_level} Risk[/{lc}]\n")
+
+    if r.risk_factors:
+        console.print("[bold red]  ⚠ Risk Factors[/bold red]")
+        for f_ in r.risk_factors:
+            console.print(f"    [red]• {f_}[/red]")
+    if r.risk_positives:
+        console.print("\n[bold green]  ✓ Mitigating Factors[/bold green]")
+        for p in r.risk_positives:
+            console.print(f"    [green]• {p}[/green]")
+    console.print()
+
+    # ── Volatility ─────────────────────────────────────────────────────────
+    console.print(Rule("Volatility  [dim](src: price history — daily returns)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: How much the stock price fluctuates. "
+                  "Annual volatility < 15% = low risk. 15–25% = moderate. "
+                  "25–40% = high. > 40% = very high. "
+                  "Skewness < 0 = left tail (risk of sudden drops). "
+                  "High kurtosis = fat tails (extreme moves more likely than normal distribution predicts).[/dim]")
+    v = r.volatility
+    if v.annual_vol is not None:
+        vc = "green" if v.annual_vol < 0.20 else "yellow" if v.annual_vol < 0.35 else "red"
+        console.print(f"  Annual Volatility:   [{vc}]{v.annual_vol:.1%}[/{vc}]  ({v.interpretation})")
+        console.print(f"  Daily Volatility:    {v.daily_vol:.2%}" if v.daily_vol else "")
+        console.print(f"  30D Volatility:      {v.vol_30d:.1%}" if v.vol_30d else "")
+        console.print(f"  90D Volatility:      {v.vol_90d:.1%}" if v.vol_90d else "")
+        if v.skewness is not None:
+            sk_c = "red" if v.skewness < -0.5 else "green" if v.skewness > 0.5 else "dim"
+            console.print(f"  Skewness:            [{sk_c}]{v.skewness:.2f}[/{sk_c}]"
+                          f"  [dim]({'negative tail risk' if v.skewness < 0 else 'positive skew'})[/dim]")
+        if v.kurtosis is not None:
+            kc = "red" if v.kurtosis > 3 else "dim"
+            console.print(f"  Kurtosis:            [{kc}]{v.kurtosis:.2f}[/{kc}]"
+                          f"  [dim]({'fat tails — extreme moves likely' if v.kurtosis > 3 else 'normal tails'})[/dim]")
+    else:
+        console.print("  [dim]Insufficient price data[/dim]")
+
+    # ── Downside Risk ──────────────────────────────────────────────────────
+    console.print(Rule("Downside Risk  [dim](src: price history — worst-case scenarios)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: VaR 95% = the loss you won't exceed on 95% of trading days. "
+                  "CVaR = average loss on the worst 5% of days (expected shortfall). "
+                  "Max drawdown = the largest peak-to-trough decline ever recorded in the period. "
+                  "Current drawdown = how far the stock is from its 52-week high right now.[/dim]")
+    d = r.downside
+    if d.var_95 is not None:
+        vc = "red" if d.var_95 < -0.03 else "yellow"
+        console.print(f"  VaR 95%:             [{vc}]{d.var_95:.2%}[/{vc}]  [dim](daily loss not exceeded 95% of days)[/dim]")
+    if d.var_99 is not None:
+        console.print(f"  VaR 99%:             [red]{d.var_99:.2%}[/red]  [dim](daily loss not exceeded 99% of days)[/dim]")
+    if d.cvar_95 is not None:
+        console.print(f"  CVaR 95%:            [red]{d.cvar_95:.2%}[/red]  [dim](avg loss on worst 5% of days)[/dim]")
+    if d.max_drawdown is not None:
+        mdc = "green" if d.max_drawdown > -0.15 else "yellow" if d.max_drawdown > -0.30 else "red"
+        console.print(f"  Max Drawdown:        [{mdc}]{d.max_drawdown:.1%}[/{mdc}]", end="")
+        if d.drawdown_start and d.drawdown_end:
+            console.print(f"  [dim]({d.drawdown_start} → {d.drawdown_end})[/dim]", end="")
+        console.print()
+        if d.max_drawdown_duration:
+            console.print(f"  Recovery Duration:   {d.max_drawdown_duration} days")
+    if d.current_drawdown is not None:
+        cdc = "green" if d.current_drawdown > -0.10 else "yellow" if d.current_drawdown > -0.25 else "red"
+        console.print(f"  vs 52W High:         [{cdc}]{d.current_drawdown:.1%}[/{cdc}]  [dim](current drawdown)[/dim]")
+
+    # ── Risk-Adjusted Returns ──────────────────────────────────────────────
+    console.print(Rule("Risk-Adjusted Returns  [dim](src: price history vs risk-free rate 4%)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Sharpe ratio = excess return per unit of total volatility "
+                  "(> 1.0 is good, > 2.0 is excellent, < 0 means you weren't compensated for risk). "
+                  "Sortino only penalises downside volatility — better for asymmetric returns. "
+                  "Calmar = annual return ÷ max drawdown (higher is better).[/dim]")
+    ra = r.risk_adjusted
+    if ra.annual_return is not None:
+        arc = "green" if ra.annual_return > 0 else "red"
+        console.print(f"  Annual Return:       [{arc}]{ra.annual_return:+.1%}[/{arc}]  [dim](over {r.period} period)[/dim]")
+    if ra.sharpe_ratio is not None:
+        sc = "green" if ra.sharpe_ratio > 1 else "yellow" if ra.sharpe_ratio > 0 else "red"
+        console.print(f"  Sharpe Ratio:        [{sc}]{ra.sharpe_ratio:.2f}[/{sc}]  [dim]({ra.interpretation})[/dim]")
+    if ra.sortino_ratio is not None:
+        sc = "green" if ra.sortino_ratio > 1 else "yellow" if ra.sortino_ratio > 0 else "red"
+        console.print(f"  Sortino Ratio:       [{sc}]{ra.sortino_ratio:.2f}[/{sc}]")
+    if ra.calmar_ratio is not None:
+        cc = "green" if ra.calmar_ratio > 1 else "yellow" if ra.calmar_ratio > 0 else "red"
+        console.print(f"  Calmar Ratio:        [{cc}]{ra.calmar_ratio:.2f}[/{cc}]")
+
+    # ── Market Risk ────────────────────────────────────────────────────────
+    console.print(Rule("Market Risk  [dim](src: price history vs SPY)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Beta measures sensitivity to the S&P 500. "
+                  "Beta = 1.0 moves in line with the market. "
+                  "Beta > 1.5 amplifies market moves (higher risk and reward). "
+                  "Beta < 0.6 is defensive. Beta < 0 moves inversely. "
+                  "R-squared tells you how much of this stock's movement is explained by the market.[/dim]")
+    m = r.market
+    beta = m.beta or m.beta_calculated
+    if beta is not None:
+        bc = "green" if beta < 0.8 else "yellow" if beta < 1.3 else "red"
+        console.print(f"  Beta:                [{bc}]{beta:.2f}[/{bc}]  [dim]({m.interpretation})[/dim]")
+        if m.beta and m.beta_calculated:
+            console.print(f"  Beta (calculated):   {m.beta_calculated:.2f}  [dim](vs {m.beta:.2f} from data provider)[/dim]")
+    if m.correlation is not None:
+        console.print(f"  Correlation (SPY):   {m.correlation:.2f}")
+    if m.r_squared is not None:
+        console.print(f"  R-Squared (SPY):     {m.r_squared:.1%}  [dim](% of movement explained by market)[/dim]")
+
+    # ── Fundamental Risk ───────────────────────────────────────────────────
+    console.print(Rule("Fundamental Risk  [dim](src: Yahoo Finance — balance sheet)[/dim]", style="cyan"))
+    console.print("  [dim]What it means: Balance sheet health. "
+                  "Debt/Equity > 200% is high leverage. "
+                  "Current ratio < 1.0 means more short-term liabilities than assets. "
+                  "Interest coverage < 2× means earnings barely cover interest payments. "
+                  "Earnings quality: good when operating cash flow exceeds reported net income.[/dim]")
+    fu = r.fundamental
+    if fu.debt_to_equity is not None:
+        dc = "green" if fu.debt_to_equity < 80 else "yellow" if fu.debt_to_equity < 150 else "red"
+        console.print(f"  Debt / Equity:       [{dc}]{fu.debt_to_equity:.0f}%[/{dc}]")
+    if fu.current_ratio is not None:
+        crc = "green" if fu.current_ratio > 1.5 else "yellow" if fu.current_ratio > 1.0 else "red"
+        console.print(f"  Current Ratio:       [{crc}]{fu.current_ratio:.2f}[/{crc}]")
+    if fu.interest_coverage is not None:
+        icc = "green" if fu.interest_coverage > 5 else "yellow" if fu.interest_coverage > 2 else "red"
+        console.print(f"  Interest Coverage:   [{icc}]{fu.interest_coverage:.1f}×[/{icc}]")
+    if fu.altman_z is not None:
+        zc = {"Safe": "green", "Grey": "yellow", "Distress": "bold red"}.get(fu.altman_zone, "white")
+        console.print(f"  Altman Z-Score:      [{zc}]{fu.altman_z:.2f} ({fu.altman_zone})[/{zc}]")
+    if fu.earnings_quality != "N/A":
+        eqc = "green" if fu.earnings_quality == "Good" else "red"
+        console.print(f"  Earnings Quality:    [{eqc}]{fu.earnings_quality}[/{eqc}]  [dim](OCF vs Net Income)[/dim]")
+
+    render_attribution(f"Yahoo Finance · price history ({r.period})")
+    console.print()
+
+
+
+def cmd_portfolio(args: list[str]) -> None:
+    """Portfolio tracker CLI command."""
+    from finscope.portfolio import Portfolio
+    p = Portfolio()
+    
+    if not args or args[0] == "show":
+        if p.is_empty:
+            console.print("\n[yellow]Portfolio is empty. Add holdings:[/yellow]")
+            console.print("[dim]  finscope portfolio add AAPL 50 142.50[/dim]\n")
+            return
+        console.print("\nLoading portfolio...\n")
+        s = p.summary()
+        
+        # Header
+        pnl_color = "green" if s.total_pnl >= 0 else "red"
+        dc_color = "green" if s.daily_change >= 0 else "red"
+        console.print(Rule("Portfolio", style="bold blue"))
+        console.print(f"  Total Value:   [bold]${s.total_value:,.2f}[/bold]   Cost Basis: ${s.total_cost:,.2f}")
+        console.print(f"  Total P&L:     [{pnl_color}]{'+' if s.total_pnl >= 0 else ''}${s.total_pnl:,.2f} ({s.total_pnl_pct:+.1f}%)[/{pnl_color}]")
+        console.print(f"  Daily Change:  [{dc_color}]{'+' if s.daily_change >= 0 else ''}${s.daily_change:,.2f} ({s.daily_change_pct:+.2f}%)[/{dc_color}]")
+        if s.weighted_beta: console.print(f"  Weighted Beta: {s.weighted_beta:.2f}")
+        if s.weighted_pe:   console.print(f"  Weighted P/E:  {s.weighted_pe:.1f}")
+        console.print()
+
+        # Holdings table
+        from finscope.ui.builders import TableBuilder
+        builder = (
+            TableBuilder("Holdings")
+            .border("blue")
+            .column("Ticker", style="bold cyan")
+            .column("Name")
+            .column("Shares", justify="right")
+            .column("Avg Cost", justify="right")
+            .column("Price", justify="right")
+            .column("P&L", justify="right")
+            .column("P&L %", justify="right")
+            .column("Alloc %", justify="right")
+        )
+        for h in s.holdings:
+            pnl = h.pnl or 0
+            pnl_p = h.pnl_pct or 0
+            pc = "green" if pnl >= 0 else "red"
+            builder.row(
+                h.symbol,
+                (h.name or "")[:20],
+                f"{h.shares:.0f}",
+                f"${h.avg_cost:.2f}",
+                f"${h.current_price:.2f}" if h.current_price else "N/A",
+                f"[{pc}]{'+' if pnl >= 0 else ''}${pnl:,.2f}[/{pc}]",
+                f"[{pc}]{pnl_p:+.1f}%[/{pc}]",
+                f"{h.allocation:.1f}%" if h.allocation else "—",
+            )
+        console.print(builder.build())
+
+        # Sector breakdown
+        if s.sectors:
+            console.print(Rule("Sector Allocation", style="cyan"))
+            for sec, pct in sorted(s.sectors.items(), key=lambda x: -x[1]):
+                bar = "█" * int(pct / 3) + "░" * (33 - int(pct / 3))
+                console.print(f"  {sec:>25}  {bar} {pct:.1f}%")
+        
+        render_attribution("Yahoo Finance")
+        return
+
+    sub = args[0].lower()
+    if sub == "add":
+        if len(args) < 4:
+            console.print("[red]Usage: finscope portfolio add TICKER SHARES COST[/red]")
+            return
+        sym, shares, cost = args[1].upper(), float(args[2]), float(args[3])
+        p.add(sym, shares, cost)
+        console.print(f"\n[green]✓ Added {shares:.0f} shares of {sym} @ ${cost:.2f}[/green]\n")
+
+    elif sub == "remove":
+        if len(args) < 2:
+            console.print("[red]Usage: finscope portfolio remove TICKER[/red]")
+            return
+        sym = args[1].upper()
+        if p.remove(sym):
+            console.print(f"\n[green]✓ Removed {sym} from portfolio[/green]\n")
+        else:
+            console.print(f"\n[yellow]{sym} not found in portfolio[/yellow]\n")
+
+    elif sub == "clear":
+        p.clear()
+        console.print("\n[green]✓ Portfolio cleared[/green]\n")
+
+
+def cmd_watch(args: list[str]) -> None:
+    """Persistent watchlist CLI command."""
+    from finscope.watchlist import Watchlist
+    w = Watchlist()
+
+    if not args or args[0] == "show":
+        if w.is_empty:
+            console.print("\n[yellow]Watchlist is empty. Add tickers:[/yellow]")
+            console.print("[dim]  finscope watch add AAPL MSFT TSLA[/dim]\n")
+            return
+        console.print(f"\nLoading watchlist ({len(w.symbols)} tickers)...\n")
+        data = w.snapshot()
+        if data:
+            render_watchlist(data)
+        else:
+            console.print("[red]Could not fetch watchlist data.[/red]")
+        render_attribution("Yahoo Finance")
+        return
+
+    sub = args[0].lower()
+    if sub == "add":
+        syms = [s.upper() for s in args[1:]]
+        if not syms:
+            console.print("[red]Usage: finscope watch add AAPL MSFT ...[/red]")
+            return
+        w.add(*syms)
+        console.print(f"\n[green]✓ Added {', '.join(syms)} to watchlist[/green]")
+        console.print(f"[dim]  Watchlist: {', '.join(w.symbols)}[/dim]\n")
+
+    elif sub == "remove":
+        syms = [s.upper() for s in args[1:]]
+        w.remove(*syms)
+        console.print(f"\n[green]✓ Removed {', '.join(syms)}[/green]\n")
+
+    elif sub == "clear":
+        w.clear()
+        console.print("\n[green]✓ Watchlist cleared[/green]\n")
+
+
+def cmd_dividends(symbol: str) -> None:
+    """Dividend analysis CLI command."""
+    console.print(f"\nAnalysing dividends for [bold cyan]{symbol}[/bold cyan]...\n")
+    from finscope.dividends import analyze_dividends
+    d = analyze_dividends(symbol)
+
+    rating_colors = {"Strong Grower": "bold green", "Reliable": "green",
+                     "Income Stock": "cyan", "Flat": "yellow",
+                     "Cutter": "red", "Minimal": "dim", "Non-Payer": "dim"}
+    rc = rating_colors.get(d.rating, "white")
+
+    console.print(Rule(f"Dividend Profile: {d.name} ({d.symbol})", style="bold magenta"))
+    console.print(f"  Rating: [{rc}]{d.rating}[/{rc}]\n")
+
+    if d.highlights:
+        console.print("[bold green]  ✓ Highlights[/bold green]")
+        for h in d.highlights:
+            console.print(f"    [green]• {h}[/green]")
+    if d.concerns:
+        console.print("[bold red]  ⚠ Concerns[/bold red]")
+        for c in d.concerns:
+            console.print(f"    [red]• {c}[/red]")
+    console.print()
+
+    # Key metrics
+    console.print(Rule("Key Dividend Metrics", style="cyan"))
+    console.print("  [dim]What it means: Yield = annual dividend / current price. Payout ratio = % of earnings paid as dividends. "
+                  "Low payout (<40%) = room for growth. High payout (>80%) = limited room. "
+                  "CAGR = compound annual growth rate of the dividend itself.[/dim]")
+    if d.dividend_yield is not None:
+        yc = "green" if d.dividend_yield > 0.03 else "cyan" if d.dividend_yield > 0.01 else "dim"
+        console.print(f"  Dividend Yield:       [{yc}]{d.dividend_yield:.2%}[/{yc}]")
+    if d.annual_dividend is not None:
+        console.print(f"  Annual Dividend:      ${d.annual_dividend:.2f} per share")
+    if d.payout_ratio is not None:
+        prc = "green" if d.payout_ratio < 0.50 else "yellow" if d.payout_ratio < 0.80 else "red"
+        console.print(f"  Payout Ratio:         [{prc}]{d.payout_ratio:.0%}[/{prc}]")
+    if d.ex_dividend_date:
+        console.print(f"  Ex-Dividend Date:     {d.ex_dividend_date}")
+    console.print(f"  Consecutive Growth:   {d.consecutive_years_growth} years"
+                  + (" [bold green](Aristocrat!)[/bold green]" if d.is_dividend_aristocrat else ""))
+
+    # Growth
+    console.print(Rule("Dividend Growth (CAGR)", style="cyan"))
+    if d.dividend_cagr_3y is not None:
+        gc = "green" if d.dividend_cagr_3y > 0.05 else "yellow" if d.dividend_cagr_3y > 0 else "red"
+        console.print(f"  3-Year CAGR:   [{gc}]{d.dividend_cagr_3y:+.1%}[/{gc}]")
+    if d.dividend_cagr_5y is not None:
+        gc = "green" if d.dividend_cagr_5y > 0.05 else "yellow" if d.dividend_cagr_5y > 0 else "red"
+        console.print(f"  5-Year CAGR:   [{gc}]{d.dividend_cagr_5y:+.1%}[/{gc}]")
+    if d.dividend_cagr_10y is not None:
+        gc = "green" if d.dividend_cagr_10y > 0.05 else "yellow" if d.dividend_cagr_10y > 0 else "red"
+        console.print(f"  10-Year CAGR:  [{gc}]{d.dividend_cagr_10y:+.1%}[/{gc}]")
+
+    if d.yield_on_cost_5y is not None:
+        console.print(f"  Yield-on-Cost (bought 5Y ago): [bold]{d.yield_on_cost_5y:.2%}[/bold]")
+    if d.drip_growth_5y is not None:
+        dc = "green" if d.drip_growth_5y > 0 else "red"
+        console.print(f"  5Y DRIP Total Return: [{dc}]{d.drip_growth_5y:+.1%}[/{dc}]  [dim](100 shares with reinvestment)[/dim]")
+
+    # History
+    if d.dividend_history:
+        console.print(Rule(f"Dividend History ({d.years_of_data} years)", style="cyan"))
+        from finscope.ui.builders import TableBuilder
+        builder = TableBuilder("").border("green").column("Date", style="dim").column("Amount", justify="right")
+        for entry in d.dividend_history[-12:]:  # last 12 payments
+            builder.row(entry["date"], f"${entry['amount']:.4f}")
+        console.print(builder.build())
+        if len(d.dividend_history) > 12:
+            console.print(f"  [dim]... and {len(d.dividend_history) - 12} earlier payments[/dim]")
+
+    render_attribution("Yahoo Finance")
+    console.print()
+
+
+def cmd_earnings(symbol: str) -> None:
+    """Earnings analysis CLI command."""
+    console.print(f"\nAnalysing earnings for [bold cyan]{symbol}[/bold cyan]...\n")
+    from finscope.earnings import analyze_earnings
+    e = analyze_earnings(symbol)
+
+    rc = {"Strong": "bold green", "Good": "green", "Mixed": "yellow", "Weak": "bold red"}.get(e.rating, "white")
+
+    console.print(Rule(f"Earnings Profile: {e.name} ({e.symbol})", style="bold magenta"))
+    console.print(f"  Rating: [{rc}]{e.rating}[/{rc}]\n")
+
+    if e.highlights:
+        console.print("[bold green]  ✓ Highlights[/bold green]")
+        for h in e.highlights:
+            console.print(f"    [green]• {h}[/green]")
+    if e.concerns:
+        console.print("[bold red]  ⚠ Concerns[/bold red]")
+        for c in e.concerns:
+            console.print(f"    [red]• {c}[/red]")
+    console.print()
+
+    # Next earnings
+    console.print(Rule("Upcoming Earnings", style="cyan"))
+    if e.next_earnings_date:
+        days = e.days_until_earnings or 0
+        urgency = "bold red" if 0 < days <= 7 else "yellow" if days <= 14 else "dim"
+        console.print(f"  Next Report Date:  [{urgency}]{e.next_earnings_date}[/{urgency}]"
+                      f"  [dim]({days} days away)[/dim]" if days > 0 else "")
+    else:
+        console.print("  [dim]Next earnings date not available[/dim]")
+
+    # Trend
+    console.print(Rule("Earnings Trend", style="cyan"))
+    console.print("  [dim]Growth rates from Yahoo Finance. EPS/revenue trending up = bullish. Declining = caution.[/dim]")
+    tc = {"Growing": "green", "Flat": "yellow", "Declining": "red"}.get(e.eps_trend, "dim")
+    console.print(f"  EPS Trend:        [{tc}]{e.eps_trend}[/{tc}]"
+                  + (f"  ({e.earnings_growth_rate:+.0%})" if e.earnings_growth_rate else ""))
+    tc = {"Growing": "green", "Flat": "yellow", "Declining": "red"}.get(e.revenue_trend, "dim")
+    console.print(f"  Revenue Trend:    [{tc}]{e.revenue_trend}[/{tc}]"
+                  + (f"  ({e.revenue_growth_rate:+.0%})" if e.revenue_growth_rate else ""))
+
+    # Beat rate
+    if e.eps_beat_rate is not None:
+        console.print(Rule(f"EPS Surprise History ({e.quarters_tracked} quarters)", style="cyan"))
+        console.print("  [dim]% of quarters where reported EPS beat analyst estimates. "
+                      "80%+ = highly predictable. <50% = frequent misses.[/dim]")
+        brc = "green" if e.eps_beat_rate >= 0.75 else "yellow" if e.eps_beat_rate >= 0.50 else "red"
+        console.print(f"  Beat Rate: [{brc}]{e.eps_beat_rate:.0%}[/{brc}]  ({e.quarters_tracked} quarters tracked)")
+
+    # Surprise table
+    if e.surprises:
+        from finscope.ui.builders import TableBuilder
+        builder = (
+            TableBuilder("Recent Quarters")
+            .border("cyan")
+            .column("Date", style="dim")
+            .column("Reported", justify="right")
+            .column("Estimate", justify="right")
+            .column("Surprise", justify="right")
+            .column("", min_width=4)
+        )
+        for s in e.surprises[-8:]:
+            icon = "[green]✓[/green]" if s.beat else "[red]✗[/red]" if s.beat is not None else "[dim]—[/dim]"
+            builder.row(
+                s.date,
+                f"${s.reported_eps:.2f}" if s.reported_eps is not None else "N/A",
+                f"${s.estimated_eps:.2f}" if s.estimated_eps is not None else "N/A",
+                f"{s.surprise_pct:+.1f}%" if s.surprise_pct is not None else "N/A",
+                icon,
+            )
+        console.print(builder.build())
+
+    render_attribution("Yahoo Finance")
+    console.print()
+
+
+def cmd_peers(symbol: str) -> None:
+    """Peer auto-discovery CLI command."""
+    console.print(f"\nDiscovering peers for [bold cyan]{symbol}[/bold cyan]...\n")
+    console.print("[dim]This may take 30-60 seconds — scanning S&P 500 for sector/industry matches...[/dim]\n")
+    from finscope.peers import discover_peers
+    pc = discover_peers(symbol)
+
+    console.print(Rule(f"Peer Comparison: {pc.target_name} ({pc.target_symbol})", style="bold magenta"))
+    console.print(f"  Sector:   {pc.sector}")
+    console.print(f"  Industry: {pc.industry}")
+    console.print(f"  Peers found: {pc.peer_count}\n")
+
+    if pc.highlights:
+        console.print("[bold green]  ✓ Relative Position[/bold green]")
+        for h in pc.highlights:
+            console.print(f"    [green]• {h}[/green]")
+    if pc.pe_rank:     console.print(f"    P/E rank:    {pc.pe_rank}")
+    if pc.margin_rank: console.print(f"    Margin rank: {pc.margin_rank}")
+    if pc.growth_rank: console.print(f"    Growth rank: {pc.growth_rank}")
+    console.print()
+
+    if not pc.peers:
+        console.print("[yellow]No peers found in the S&P 500 universe.[/yellow]")
+        return
+
+    from finscope.ui.builders import TableBuilder
+    builder = (
+        TableBuilder("Peer Multiples Comparison")
+        .border("blue")
+        .column("Ticker", style="bold cyan")
+        .column("Name")
+        .column("Mkt Cap", justify="right")
+        .column("P/E", justify="right")
+        .column("Fwd P/E", justify="right")
+        .column("P/B", justify="right")
+        .column("EV/EBITDA", justify="right")
+        .column("ROE", justify="right")
+        .column("Margin", justify="right")
+        .column("Growth", justify="right")
+    )
+
+    def _fmt_cap(v):
+        if v is None: return "N/A"
+        if v >= 1e12: return f"${v/1e12:.1f}T"
+        if v >= 1e9: return f"${v/1e9:.0f}B"
+        return f"${v/1e6:.0f}M"
+
+    # Target row first (highlighted)
+    t = pc.target_metrics
+    builder.row(
+        f"[bold]{t.symbol}[/bold]", f"[bold]{(t.name or '')[:18]}[/bold]",
+        f"[bold]{_fmt_cap(t.market_cap)}[/bold]",
+        f"[bold]{t.pe:.1f}[/bold]" if t.pe else "N/A",
+        f"{t.forward_pe:.1f}" if t.forward_pe else "N/A",
+        f"{t.pb:.1f}" if t.pb else "N/A",
+        f"{t.ev_ebitda:.1f}" if t.ev_ebitda else "N/A",
+        f"{t.roe:.0%}" if t.roe else "N/A",
+        f"{t.profit_margin:.0%}" if t.profit_margin else "N/A",
+        f"{t.revenue_growth:+.0%}" if t.revenue_growth else "N/A",
+    )
+
+    for p in pc.peers:
+        builder.row(
+            p.symbol, (p.name or "")[:18], _fmt_cap(p.market_cap),
+            f"{p.pe:.1f}" if p.pe else "N/A",
+            f"{p.forward_pe:.1f}" if p.forward_pe else "N/A",
+            f"{p.pb:.1f}" if p.pb else "N/A",
+            f"{p.ev_ebitda:.1f}" if p.ev_ebitda else "N/A",
+            f"{p.roe:.0%}" if p.roe else "N/A",
+            f"{p.profit_margin:.0%}" if p.profit_margin else "N/A",
+            f"{p.revenue_growth:+.0%}" if p.revenue_growth else "N/A",
+        )
+    console.print(builder.build())
+    render_attribution("Yahoo Finance")
+    console.print()
+
+
+# ── Fund risk & analysis renderers ───────────────────────────────────────────
+
+
+def _render_fund_risk(r: "FundRisk") -> None:
+    """Render a FundRisk result to the terminal."""
+    from finscope.fund_analysis.models import FundRisk
+    level_colors = {"Low": "bold green", "Moderate": "yellow",
+                    "High": "bold red", "Very High": "bold red on white"}
+    lc  = level_colors.get(r.risk_level, "white")
+    bar = "█" * int((r.risk_score or 0) / 5) + "░" * (20 - int((r.risk_score or 0) / 5))
+
+    console.print(Rule(f"Fund Risk: {r.name}", style="bold magenta"))
+    console.print(f"  [{lc}]{bar} {r.risk_score:.0f}/100  {r.risk_level} Risk[/{lc}]\n")
+
+    if r.risk_factors:
+        console.print("[bold red]  ⚠ Risk Factors[/bold red]")
+        for f_ in r.risk_factors:
+            console.print(f"    [red]• {f_}[/red]")
+    if r.risk_positives:
+        console.print("\n[bold green]  ✓ Mitigating Factors[/bold green]")
+        for p in r.risk_positives:
+            console.print(f"    [green]• {p}[/green]")
+    console.print()
+
+    # Volatility
+    console.print(Rule("Volatility  [dim](src: price/NAV history)[/dim]", style="cyan"))
+    console.print("  [dim]How much the NAV/price fluctuates. Annual < 15% = low. 15–25% = moderate. > 40% = very high.[/dim]")
+    v = r.volatility
+    if v.annual_vol is not None:
+        vc = "green" if v.annual_vol < 0.20 else "yellow" if v.annual_vol < 0.35 else "red"
+        console.print(f"  Annual Volatility: [{vc}]{v.annual_vol:.1%}[/{vc}]  ({v.interpretation})")
+        if v.vol_30d:  console.print(f"  30D Volatility:    {v.vol_30d:.1%}")
+        if v.vol_90d:  console.print(f"  90D Volatility:    {v.vol_90d:.1%}")
+        if v.skewness is not None:
+            sc = "red" if v.skewness < -0.5 else "green" if v.skewness > 0.5 else "dim"
+            console.print(f"  Skewness:          [{sc}]{v.skewness:.2f}[/{sc}]  [dim]({'left tail risk' if v.skewness < 0 else 'positive skew'})[/dim]")
+        if v.kurtosis is not None:
+            kc = "red" if v.kurtosis > 3 else "dim"
+            console.print(f"  Kurtosis:          [{kc}]{v.kurtosis:.2f}[/{kc}]  [dim]({'fat tails' if v.kurtosis > 3 else 'normal tails'})[/dim]")
+
+    # Downside
+    console.print(Rule("Downside Risk", style="cyan"))
+    console.print("  [dim]VaR 95% = daily loss not exceeded on 95% of days. "
+                  "CVaR = average loss on worst 5% of days. "
+                  "Max drawdown = largest peak-to-trough decline.[/dim]")
+    d = r.downside
+    if d.var_95 is not None:
+        vc = "red" if d.var_95 < -0.03 else "yellow"
+        console.print(f"  VaR 95%:           [{vc}]{d.var_95:.2%}[/{vc}]")
+    if d.var_99 is not None:
+        console.print(f"  VaR 99%:           [red]{d.var_99:.2%}[/red]")
+    if d.cvar_95 is not None:
+        console.print(f"  CVaR 95%:          [red]{d.cvar_95:.2%}[/red]")
+    if d.max_drawdown is not None:
+        mdc = "green" if d.max_drawdown > -0.15 else "yellow" if d.max_drawdown > -0.30 else "red"
+        console.print(f"  Max Drawdown:      [{mdc}]{d.max_drawdown:.1%}[/{mdc}]", end="")
+        if d.drawdown_start and d.drawdown_end:
+            console.print(f"  [dim]({d.drawdown_start} → {d.drawdown_end})[/dim]", end="")
+        console.print()
+        if d.max_drawdown_duration:
+            console.print(f"  Recovery:          {d.max_drawdown_duration} days")
+    if d.current_drawdown is not None:
+        cdc = "green" if d.current_drawdown > -0.10 else "yellow" if d.current_drawdown > -0.25 else "red"
+        console.print(f"  Current Drawdown:  [{cdc}]{d.current_drawdown:.1%}[/{cdc}]  [dim](from 52W high)[/dim]")
+
+    # Risk-adjusted
+    console.print(Rule("Risk-Adjusted Returns  [dim](risk-free rate 4%)[/dim]", style="cyan"))
+    console.print("  [dim]Sharpe > 1.0 = good. Sortino only penalises downside. Calmar = return ÷ drawdown.[/dim]")
+    ra = r.risk_adjusted
+    if ra.annual_return is not None:
+        arc = "green" if ra.annual_return > 0 else "red"
+        console.print(f"  Annual Return:     [{arc}]{ra.annual_return:+.1%}[/{arc}]  [dim](over {r.period} period)[/dim]")
+    if ra.sharpe_ratio is not None:
+        sc = "green" if ra.sharpe_ratio > 1 else "yellow" if ra.sharpe_ratio > 0 else "red"
+        console.print(f"  Sharpe Ratio:      [{sc}]{ra.sharpe_ratio:.2f}[/{sc}]  [dim]({ra.interpretation})[/dim]")
+    if ra.sortino_ratio is not None:
+        sc = "green" if ra.sortino_ratio > 1 else "yellow" if ra.sortino_ratio > 0 else "red"
+        console.print(f"  Sortino Ratio:     [{sc}]{ra.sortino_ratio:.2f}[/{sc}]")
+    if ra.calmar_ratio is not None:
+        cc = "green" if ra.calmar_ratio > 1 else "yellow" if ra.calmar_ratio > 0 else "red"
+        console.print(f"  Calmar Ratio:      [{cc}]{ra.calmar_ratio:.2f}[/{cc}]")
+
+    # Beta (global ETFs only)
+    if r.beta is not None or r.correlation_vs_market is not None:
+        console.print(Rule("Market Sensitivity  [dim](vs SPY)[/dim]", style="cyan"))
+        console.print("  [dim]Beta < 0.8 = defensive. Beta > 1.2 = amplifies market moves.[/dim]")
+        if r.beta is not None:
+            bc = "green" if r.beta < 0.8 else "yellow" if r.beta < 1.3 else "red"
+            console.print(f"  Beta:              [{bc}]{r.beta:.2f}[/{bc}]")
+        if r.correlation_vs_market is not None:
+            console.print(f"  Correlation (SPY): {r.correlation_vs_market:.2f}")
+        if r.r_squared is not None:
+            console.print(f"  R-Squared (SPY):   {r.r_squared:.1%}")
+
+
+def _render_fund_analysis(a: "FundAnalysis") -> None:
+    """Render a FundAnalysis result to the terminal."""
+    rating_colors = {"Strong": "bold green", "Good": "green",
+                     "Average": "yellow", "Below Average": "red", "Weak": "bold red"}
+    rc = rating_colors.get(a.overall_rating, "white")
+
+    console.print(Rule(f"Fund Analysis: {a.name}", style="bold magenta"))
+    console.print(f"  Overall Rating: [{rc}]{a.overall_rating}[/{rc}]")
+    console.print(f"  Category:       {a.category}")
+    console.print(f"  Fund House:     {a.fund_house}\n")
+
+    if a.highlights:
+        console.print("[bold green]  ✓ Highlights[/bold green]")
+        for h in a.highlights:
+            console.print(f"    [green]• {h}[/green]")
+    if a.concerns:
+        console.print("[bold red]  ⚠ Concerns[/bold red]")
+        for c in a.concerns:
+            console.print(f"    [red]• {c}[/red]")
+    console.print()
+
+    # Cost
+    console.print(Rule("Cost Efficiency  [dim](expense ratio)[/dim]", style="cyan"))
+    console.print("  [dim]Expense ratio = annual fee as % of AUM. ETFs < 0.10% = excellent. "
+                  "Active funds < 0.50% = good. Higher fees directly reduce your returns.[/dim]")
+    if a.expense_ratio is not None:
+        er_color = "green" if a.expense_rating in ("Excellent", "Good") else "yellow" if a.expense_rating == "Average" else "red"
+        console.print(f"  Expense Ratio: [{er_color}]{a.expense_ratio:.3%}[/{er_color}]  ({a.expense_rating})")
+    else:
+        console.print("  [dim]Expense ratio not available[/dim]")
+    if a.aum is not None:
+        console.print(f"  AUM:           ${a.aum/1e9:.2f}B  ({a.aum_rating})" if a.aum >= 1e9
+                      else f"  AUM:           ${a.aum/1e6:.0f}M  ({a.aum_rating})")
+
+    # Rolling returns
+    console.print(Rule("Rolling Returns (CAGR)  [dim](src: price/NAV history)[/dim]", style="cyan"))
+    console.print("  [dim]CAGR = Compound Annual Growth Rate. Shows what ₹100 invested would be worth "
+                  "annualised over each period. Compare against category/benchmark.[/dim]")
+    from finscope.ui.builders import TableBuilder
+    builder = (
+        TableBuilder("")
+        .border("green")
+        .column("Period", style="bold", min_width=8)
+    )
+    labels = [k for k in ["1M", "3M", "6M", "1Y", "3Y", "5Y"] if k in a.rolling_returns]
+    for label in labels:
+        builder.column(label, justify="right", min_width=10)
+    row = []
+    for label in labels:
+        val = a.rolling_returns.get(label)
+        if val is None:
+            row.append("[dim]N/A[/dim]")
+        else:
+            color = "green" if val > 0 else "red"
+            row.append(f"[{color}]{val:+.1%}[/{color}]")
+    if row:
+        builder.row("Return", *row)
+        console.print(builder.build())
+
+    # Consistency
+    if a.consistency_score is not None:
+        console.print(Rule("Consistency", style="cyan"))
+        console.print("  [dim]% of rolling 12-month windows with a positive return. "
+                      "> 80% = very consistent. < 50% = unreliable.[/dim]")
+        cc = "green" if a.consistency_score > 0.80 else "yellow" if a.consistency_score > 0.60 else "red"
+        console.print(f"  Rolling 1Y Consistency: [{cc}]{a.consistency_score:.0%}[/{cc}] of windows positive")
+
+
+def cmd_global_fund_risk(symbol: str, period: str = "1y") -> None:
+    """Risk profile for a global ETF or mutual fund."""
+    console.print(f"\nComputing risk for [bold cyan]{symbol}[/bold cyan] ({period})...\n")
+    from finscope.fund_analysis import analyze_global_fund
+    import finscope
+    fund = finscope.fund(symbol)
+    r, _ = analyze_global_fund(symbol, fund=fund, period=period)
+    _render_fund_risk(r)
+    render_attribution(f"Yahoo Finance · price history ({period})")
+
+
+def cmd_global_fund_analyze(symbol: str) -> None:
+    """Fund-specific analysis for a global ETF or mutual fund."""
+    console.print(f"\nAnalysing fund [bold cyan]{symbol}[/bold cyan]...\n")
+    from finscope.fund_analysis import analyze_global_fund
+    import finscope
+    fund = finscope.fund(symbol)
+    _, a = analyze_global_fund(symbol, fund=fund)
+    _render_fund_analysis(a)
+    render_attribution("Yahoo Finance")
+
+
+def cmd_india_fund_risk_and_analysis(fund_service: "FundAnalysisService",
+                                      scheme_code: str) -> None:
+    """Risk + analysis for an Indian mutual fund (MFAPI)."""
+    console.print(f"\nLoading scheme {scheme_code}...\n")
+    detail = fund_service.get_india_fund_detail(scheme_code)
+    if not detail:
+        console.print(f"[red]Could not fetch fund {scheme_code}.[/red]")
+        return
+    meta     = detail.get("meta", {})
+    nav_data = detail.get("data", [])
+
+    from finscope.fund_analysis import analyze_india_fund
+    r, a = analyze_india_fund(nav_data, meta)
+    _render_fund_risk(r)
+    console.print()
+    _render_fund_analysis(a)
+    render_attribution("MFAPI.in")
+    # Offer deeper analysis
+    deeper = questionary.select(
+        "Deep dive:",
+        choices=[
+            questionary.Choice("Risk Profile (volatility, VaR, drawdown, Sharpe)", "risk"),
+            questionary.Choice("Fund Analysis (rolling returns, consistency)", "analyze"),
+            questionary.Choice("Skip", "skip"),
+        ],
+        style=questionary.Style([("pointer", "fg:cyan bold"), ("highlighted", "fg:cyan bold")]),
+    ).ask()
+    if deeper in ("risk", "analyze"):
+        cmd_india_fund_risk_and_analysis(fund_service, scheme_code)
 
 
 def cmd_analyze(symbol: str) -> None:
@@ -663,6 +1406,37 @@ class ValuateCommand(DashboardCommand):
         cmd_valuate(ctx.symbol)
 
 
+
+class RiskCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        period = questionary.select(
+            "Look-back period:",
+            choices=[
+                questionary.Choice("6 months", "6mo"),
+                questionary.Choice("1 year (default)", "1y"),
+                questionary.Choice("2 years", "2y"),
+                questionary.Choice("5 years", "5y"),
+            ],
+            default="1y",
+        ).ask() or "1y"
+        cmd_risk(ctx.symbol, period)
+
+
+class DividendsCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        cmd_dividends(ctx.symbol)
+
+
+class EarningsCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        cmd_earnings(ctx.symbol)
+
+
+class PeersCommand(DashboardCommand):
+    def execute(self, ctx: DashboardContext) -> None:
+        cmd_peers(ctx.symbol)
+
+
 class ScreenCommand(DashboardCommand):
     def execute(self, ctx: DashboardContext) -> None:
         query = Prompt.ask(
@@ -854,15 +1628,19 @@ def _build_registry() -> CommandRegistry:
         .register(12, "SEC EDGAR: Insider Transactions",       InsiderTransactionsCommand())
         # ── Valuation & Screening ──────────────────────────────────────────
         .register(13, "Valuation Analysis (6 models)",         ValuateCommand())
-        .register(14, "Stock Screener (S&P 500)",              ScreenCommand())
+        .register(14, "Risk Profile (volatility, VaR, Sharpe)",  RiskCommand())
+        .register(15, "Dividend Analysis",                      DividendsCommand())
+        .register(16, "Earnings Analysis",                      EarningsCommand())
+        .register(17, "Peer Comparison (auto-discover)",        PeersCommand())
+        .register(18, "Stock Screener (S&P 500)",              ScreenCommand())
         # ── Comparison & Watchlist ─────────────────────────────────────────
-        .register(15, "Compare Stocks",                        CompareStocksCommand())
-        .register(16, "Watchlist",                             WatchlistCommand())
+        .register(19, "Compare Stocks",                        CompareStocksCommand())
+        .register(20, "Watchlist",                             WatchlistCommand())
         # ── AI ─────────────────────────────────────────────────────────────
         .register(17, "\U0001f9e0  AI Analysis →",              AIAnalysisCommand())
         # ── Utilities ──────────────────────────────────────────────────────
-        .register(18, "Export Report to HTML",                 ExportHtmlCommand())
-        .register(19, "Mutual Funds",                          MutualFundsCommand())
+        .register(22, "Export Report to HTML",                 ExportHtmlCommand())
+        .register(23, "Mutual Funds",                          MutualFundsCommand())
         .register(20, "Change Ticker",                         ChangeTickerCommand())
         .register(0,  "Exit",                                  None)
     )
@@ -895,16 +1673,20 @@ def _show_menu(ctx: DashboardContext) -> DashboardCommand | None | ChangeTickerC
         questionary.Choice("Insider Transactions",         12),
         questionary.Separator("─── Valuation & Screening ──────────────────"),
         questionary.Choice("Valuation Analysis (6 models)",13),
-        questionary.Choice("Stock Screener (S&P 500)",     14),
+        questionary.Choice("Risk Profile (vol, VaR, Sharpe, beta)", 14),
+        questionary.Choice("Dividend Analysis",             15),
+        questionary.Choice("Earnings Analysis",             16),
+        questionary.Choice("Peer Comparison (auto-discover)", 17),
+        questionary.Choice("Stock Screener (S&P 500)",     18),
         questionary.Separator("─── Comparison ─────────────────────────────"),
-        questionary.Choice("Compare Stocks",               15),
-        questionary.Choice("Watchlist",                    16),
+        questionary.Choice("Compare Stocks",               19),
+        questionary.Choice("Watchlist",                    20),
         questionary.Separator("─── AI (requires API key) ──────────────────"),
-        questionary.Choice("\U0001f9e0  AI Analysis \u2192",    17),
+        questionary.Choice("\U0001f9e0  AI Analysis \u2192",    21),
         questionary.Separator("─── Utilities ──────────────────────────────"),
-        questionary.Choice("Export Report to HTML",        18),
-        questionary.Choice("Mutual Funds",                 19),
-        questionary.Choice("Change Ticker",                20),
+        questionary.Choice("Export Report to HTML",        22),
+        questionary.Choice("Mutual Funds",                 23),
+        questionary.Choice("Change Ticker",                24),
         questionary.Separator(),
         questionary.Choice("Exit",                         0),
     ]
@@ -994,6 +1776,20 @@ def _run_mutual_funds_menu(fund_service: FundAnalysisService) -> None:
                 continue
             render_global_fund_detail(sym, f.info, f.returns, f.sparkline)
             render_attribution("Yahoo Finance")
+            # Offer deeper analysis
+            deeper = questionary.select(
+                "Deep dive:",
+                choices=[
+                    questionary.Choice("Risk Profile (volatility, VaR, drawdown, Sharpe)", "risk"),
+                    questionary.Choice("Fund Analysis (expense, rolling returns, consistency)", "analyze"),
+                    questionary.Choice("Skip", "skip"),
+                ],
+                style=questionary.Style([("pointer", "fg:cyan bold"), ("highlighted", "fg:cyan bold")]),
+            ).ask()
+            if deeper == "risk":
+                cmd_global_fund_risk(sym)
+            elif deeper == "analyze":
+                cmd_global_fund_analyze(sym)
 
 
 def _india_fund_flow(fund_service: FundAnalysisService) -> None:
@@ -1125,9 +1921,17 @@ examples:
   finscope AAPL sec-filings         Recent SEC filings
   finscope AAPL insiders            Insider transactions
   finscope AAPL valuate              Valuation analysis (6 models)
+  finscope AAPL risk                 Risk profile (volatility, VaR, Sharpe, beta)
   finscope compare AAPL MSFT GOOGL  Side-by-side comparison
   finscope watchlist AAPL TSLA NVDA Compact watchlist
-  finscope screen "pe < 15"         Screen S&P 500 stocks
+  finscope AAPL dividends            Dividend analysis (history, growth, DRIP)
+  finscope AAPL earnings             Earnings surprise history & beat rate
+  finscope AAPL peers                Auto-discover sector peers & compare
+  finscope portfolio                 View portfolio
+  finscope portfolio add AAPL 50 142 Add holding
+  finscope watch                     View persistent watchlist
+  finscope watch add AAPL MSFT       Add to watchlist
+  finscope screen "pe < 15"          Screen S&P 500 stocks
   finscope export AAPL              HTML report
   finscope funds                    Mutual funds explorer
   finscope AAPL -i                  Interactive menu mode
@@ -1229,6 +2033,14 @@ def _dispatch(parsed: argparse.Namespace) -> None:
         cmd_export(args[1].upper(), output=parsed.output)
         return
 
+    if first == "portfolio":
+        cmd_portfolio(args[1:])
+        return
+
+    if first == "watch":
+        cmd_watch(args[1:])
+        return
+
     if first == "screen":
         if len(args) < 2:
             console.print("[red]Usage: finscope screen \"QUERY\"[/red]")
@@ -1275,6 +2087,10 @@ def _dispatch(parsed: argparse.Namespace) -> None:
         "sec-filings":    lambda: cmd_sec_filings(symbol),
         "insiders":          lambda: cmd_insiders(symbol),
         "valuate":           lambda: cmd_valuate(symbol),
+        "risk":              lambda: cmd_risk(symbol, args[2] if len(args) > 2 else parsed.period),
+        "dividends":         lambda: cmd_dividends(symbol),
+        "earnings":          lambda: cmd_earnings(symbol),
+        "peers":             lambda: cmd_peers(symbol),
         "analyze":           lambda: cmd_analyze(symbol),
         "ask":               lambda: cmd_ask(symbol, " ".join(args[2:]) if len(args) > 2 else ""),
         "summarize-filings": lambda: cmd_summarize_filings(symbol),

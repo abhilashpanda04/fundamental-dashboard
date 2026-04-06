@@ -81,6 +81,10 @@ class MutualFundProvider(ABC):
         """Search for funds matching *query* by name."""
 
     @abstractmethod
+    def get_price_history(self, symbol: str, period: str = "1mo") -> pd.DataFrame:
+        """Return OHLCV price history for a global fund / ETF."""
+
+    @abstractmethod
     def get_fund_detail(self, identifier: str) -> dict | None:
         """Return full fund detail including NAV history."""
 

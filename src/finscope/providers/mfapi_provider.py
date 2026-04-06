@@ -203,7 +203,7 @@ class MfapiProvider(MutualFundProvider):
     def get_global_fund_sparkline(self, symbol: str, period: str = "1y") -> list[float]:
         """Return closing prices for sparkline rendering."""
         try:
-            hist = yf.Ticker(symbol).history(period=period)
+            hist = self.get_price_history(symbol, period=period)
             if hist.empty:
                 return []
             close = hist["Close"].dropna()
@@ -212,6 +212,14 @@ class MfapiProvider(MutualFundProvider):
             return [float(v) for v in close.tolist()]
         except Exception:
             return []
+
+    def get_price_history(self, symbol: str, period: str = "1mo") -> pd.DataFrame:
+        """Return full OHLCV price history for a global fund / ETF."""
+        try:
+            return yf.Ticker(symbol).history(period=period)
+        except Exception as exc:
+            logger.warning("Global fund price history for %s: %s", symbol, exc)
+            return pd.DataFrame()
 
     def get_popular_funds_snapshot(self, region: str) -> list[dict]:
         """Return a quick overview of popular funds for *region*."""

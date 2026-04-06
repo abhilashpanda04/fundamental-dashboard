@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pandas as pd
 import pytest
 
 from finscope.providers.mfapi_provider import MfapiProvider
@@ -91,6 +92,15 @@ class TestGlobalFundMethods:
         mock_provider.get_global_fund_sparkline.return_value = [100.0, 110.0]
         result = service.get_global_fund_sparkline("VFIAX", period="1y")
         assert result == [100.0, 110.0]
+
+    def test_get_price_history_delegates(self, service, mock_provider):
+        expected = pd.DataFrame({"Close": [100.0, 101.0]})
+        mock_provider.get_price_history.return_value = expected
+
+        result = service.get_price_history("VFIAX", period="6mo")
+
+        mock_provider.get_price_history.assert_called_once_with("VFIAX", "6mo")
+        assert result.equals(expected)
 
     def test_get_popular_funds_snapshot_delegates(self, service, mock_provider):
         mock_provider.get_popular_funds_snapshot.return_value = [{"symbol": "VFIAX"}]

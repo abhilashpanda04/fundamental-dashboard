@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import pytest
 
 from finscope.exceptions import FundNotFoundError
@@ -176,6 +177,30 @@ class TestNavSeries:
         full = MfapiProvider._nav_series(nav_data, days=365)
         short = MfapiProvider._nav_series(nav_data, days=30)
         assert len(short) <= len(full)
+
+
+class TestGlobalPriceHistory:
+    def test_get_price_history_returns_dataframe_from_yfinance(self, provider):
+        expected = pd.DataFrame({"Close": [100.0, 101.5]})
+        ticker = MagicMock()
+        ticker.history.return_value = expected
+
+        with patch("finscope.providers.mfapi_provider.yf.Ticker", return_value=ticker) as mock_ticker:
+            result = provider.get_price_history("VFIAX", period="3mo")
+
+        mock_ticker.assert_called_once_with("VFIAX")
+        ticker.history.assert_called_once_with(period="3mo")
+        assert result.equals(expected)
+
+    def test_get_price_history_returns_empty_dataframe_and_logs_warning_on_error(self, provider, caplog):
+        ticker = MagicMock()
+        ticker.history.side_effect = Exception("boom")
+
+        with patch("finscope.providers.mfapi_provider.yf.Ticker", return_value=ticker):
+            result = provider.get_price_history("VFIAX", period="1mo")
+
+        assert result.empty
+        assert "Global fund price history for VFIAX" in caplog.text
 
 
 class TestPopularFunds:
